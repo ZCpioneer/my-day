@@ -193,14 +193,14 @@ async function runTurn(mode: ChatMode, userText: string) {
   awaiting.value = true;
   if (mode === "morning" || mode === "evening") lastRitual.value = mode;
   const history = chat.value.messages.slice();
-  await appendMessage({
-    id: newId(),
-    role: "user",
-    content: userText,
-    createdAt: new Date().toISOString(),
-    mode,
-  });
   try {
+    await appendMessage({
+      id: newId(),
+      role: "user",
+      content: userText,
+      createdAt: new Date().toISOString(),
+      mode,
+    });
     const { assistantText } = await runAgent({
       deps: agentDeps,
       mode,
