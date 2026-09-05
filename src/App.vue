@@ -15,11 +15,26 @@
       </div>
     </header>
     <div class="screens">
-      <RitualBar v-if="tab === 'chat'" @morning="onMorning" @evening="onEvening" />
-      <ChatScreen v-if="tab === 'chat'" />
-      <TodoScreen v-else-if="tab === 'todo'" />
-      <DiaryScreen v-else-if="tab === 'diary'" />
-      <SettingsScreen v-else />
+      <RitualBar
+        v-if="tab === 'chat'"
+        :disabled="awaiting"
+        :morning-active="lastRitual === 'morning'"
+        :evening-active="lastRitual === 'evening'"
+        @morning="onMorning"
+        @evening="onEvening"
+      />
+      <ChatScreen
+        v-if="tab === 'chat'"
+        :messages="chat.messages"
+        :awaiting="awaiting"
+        :pending-propose="pendingPropose"
+        @send="onSend"
+        @confirm="onConfirmPropose"
+        @skip="onSkipPropose"
+      />
+      <TodoScreen v-else-if="tab === 'todo'" :todos="todos" @toggle="onToggle" />
+      <DiaryScreen v-else-if="tab === 'diary'" :daily="daily" :date="date" />
+      <SettingsScreen v-else :settings="settings" @save="onSaveSettings" />
     </div>
     <div class="dock-wrap">
       <nav class="dock">
@@ -50,40 +65,195 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import RitualBar from "./components/RitualBar.vue";
-import DebugPanel from "./components/DebugPanel.vue";
-import ChatScreen from "./screens/ChatScreen.vue";
-import TodoScreen from "./screens/TodoScreen.vue";
-import DiaryScreen from "./screens/DiaryScreen.vue";
-import SettingsScreen from "./screens/SettingsScreen.vue";
-import { localDate } from "./dates";
-import { loadSettings } from "./storage/settings";
-import { DEFAULT_MODEL, type Settings } from "./types";
+import { ref } from "vue";
+import { runAgent, type AgentDeps } from "@/agent/loop";
+import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
+import { browserPostJson } from "@/api/post-json";
+import RitualBar from "@/components/RitualBar.vue";
+import DebugPanel from "@/components/DebugPanel.vue";
+import ChatScreen from "@/screens/ChatScreen.vue";
+import TodoScreen from "@/screens/TodoScreen.vue";
+import DiaryScreen from "@/screens/DiaryScreen.vue";
+import SettingsScreen from "@/screens/SettingsScreen.vue";
+import { localDate } from "@/dates";
+import { debugLog } from "@/debug/log";
+import { newId } from "@/ids";
+import { chatRepo, logRepo, todoRepo } from "@/storage/db";
+import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
+import {
+  DEFAULT_MODEL,
+  type ChatMessage,
+  type ChatMode,
+  type DailyLog,
+  type DayChat,
+  type ProposedTodo,
+  type Settings,
+  type Todo,
+} from "@/types";
 
 type Tab = "chat" | "todo" | "diary" | "settings";
 
 const tab = ref<Tab>("chat");
-const settings = reactive<Settings>({
+const settings = ref<Settings>({
   apiKey: "",
   model: DEFAULT_MODEL,
   debugOverlay: true,
 });
+const todos = ref<Todo[]>([]);
+const date = localDate();
+const chat = ref<DayChat>({ date, messages: [] });
+const daily = ref<DailyLog | null>(null);
+const pendingPropose = ref<ProposedTodo[] | null>(null);
+const awaiting = ref(false);
+const lastRitual = ref<ChatMode | null>(null);
+let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
 
-const dateLabel = formatDateLabel(localDate());
+const dateLabel = formatDateLabel(date);
 
 function formatDateLabel(iso: string): string {
   const parts = iso.split("-");
   return `${Number(parts[1])}月${Number(parts[2])}日`;
 }
 
-onMounted(async () => {
-  const loaded = await loadSettings();
-  settings.apiKey = loaded.apiKey;
-  settings.model = loaded.model;
-  settings.debugOverlay = loaded.debugOverlay;
-});
+const ready = (async () => {
+  settings.value = await loadSettings();
+  todos.value = await todoRepo.list();
+  chat.value = await chatRepo.get(date);
+  daily.value = await logRepo.get(date);
+})();
 
-function onMorning() {}
-function onEvening() {}
+async function complete(req: ChatCompletionRequest) {
+  const key = effectiveApiKey(settings.value);
+  if (!key) {
+    debugLog.push({ event: "http_fail", detail: "no key", status: 401 });
+    throw new ApiError("no key", 401, "去设置里粘贴 DeepSeek API Key");
+  }
+  return chatCompletions({ apiKey: key, request: req, postJson: browserPostJson });
+}
+
+async function addTodos(items: ProposedTodo[]) {
+  const sourceDate = localDate();
+  const createdAt = new Date().toISOString();
+  for (const item of items) {
+    await todoRepo.add({
+      id: newId(),
+      title: item.title,
+      status: "open",
+      sourceDate,
+      createdAt,
+    });
+  }
+  todos.value = await todoRepo.list();
+}
+
+async function writeDailyLog(log: DailyLog) {
+  await logRepo.put(log);
+  if (log.date === date) daily.value = log;
+}
+
+function onPropose(items: ProposedTodo[]): Promise<ProposedTodo[]> {
+  pendingPropose.value = items;
+  return new Promise((resolve) => {
+    proposeResolve = resolve;
+  });
+}
+
+const agentDeps: AgentDeps = {
+  complete,
+  listTodos: () => todoRepo.list(),
+  addTodos,
+  writeDailyLog,
+  now: () => new Date(),
+  onPropose,
+};
+
+function settlePropose(accepted: ProposedTodo[]) {
+  pendingPropose.value = null;
+  const resolve = proposeResolve;
+  proposeResolve = null;
+  resolve?.(accepted);
+}
+
+function onConfirmPropose(items: ProposedTodo[]) {
+  settlePropose(items);
+}
+
+function onSkipPropose() {
+  settlePropose([]);
+}
+
+async function appendMessage(msg: ChatMessage) {
+  await chatRepo.append(date, msg);
+  chat.value = await chatRepo.get(date);
+}
+
+async function runTurn(mode: ChatMode, userText: string) {
+  await ready;
+  if (awaiting.value) return;
+  awaiting.value = true;
+  if (mode === "morning" || mode === "evening") lastRitual.value = mode;
+  const history = chat.value.messages.slice();
+  await appendMessage({
+    id: newId(),
+    role: "user",
+    content: userText,
+    createdAt: new Date().toISOString(),
+    mode,
+  });
+  try {
+    const { assistantText } = await runAgent({
+      deps: agentDeps,
+      mode,
+      userText,
+      history,
+      model: settings.value.model,
+    });
+    await appendMessage({
+      id: newId(),
+      role: "assistant",
+      content: assistantText,
+      createdAt: new Date().toISOString(),
+      mode,
+    });
+  } catch (e) {
+    const userMessage = e instanceof ApiError ? e.userMessage : "模型这轮没回上，再说一次";
+    if (!(e instanceof ApiError)) {
+      debugLog.push({ event: "http_fail", detail: e instanceof Error ? e.message : String(e) });
+    }
+    await appendMessage({
+      id: newId(),
+      role: "assistant",
+      content: userMessage,
+      createdAt: new Date().toISOString(),
+      mode,
+    });
+  } finally {
+    awaiting.value = false;
+    if (proposeResolve) settlePropose([]);
+  }
+}
+
+function onMorning() {
+  void runTurn("morning", "开始今天。");
+}
+
+function onEvening() {
+  void runTurn("evening", "今天结束了。");
+}
+
+function onSend(text: string) {
+  void runTurn("chat", text);
+}
+
+async function onToggle(id: string) {
+  await ready;
+  await todoRepo.toggle(id);
+  todos.value = await todoRepo.list();
+}
+
+async function onSaveSettings(next: Settings) {
+  await ready;
+  await saveSettings(next);
+  settings.value = next;
+}
 </script>
