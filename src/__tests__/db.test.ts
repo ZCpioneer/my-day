@@ -22,6 +22,26 @@ describe("chatRepo", () => {
     expect(day.messages).toHaveLength(1);
     expect(day.messages[0].content).toBe("开始今天。");
   });
+
+  it("clears a day's conversation without touching todos", async () => {
+    await chatRepo.append("2026-09-05", {
+      id: "m1",
+      role: "user",
+      content: "开始今天。",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      mode: "morning",
+    });
+    await todoRepo.add({
+      id: "t1",
+      title: "周报",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+    });
+    await chatRepo.clear("2026-09-05");
+    expect((await chatRepo.get("2026-09-05")).messages).toEqual([]);
+    expect((await todoRepo.list()).map((t) => t.title)).toEqual(["周报"]);
+  });
 });
 
 describe("todoRepo", () => {

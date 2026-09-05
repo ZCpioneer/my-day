@@ -59,6 +59,13 @@ export const chatRepo = {
     await txDone(tx);
     db.close();
   },
+  async clear(date: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("chats", "readwrite");
+    tx.objectStore("chats").put({ date, messages: [] });
+    await txDone(tx);
+    db.close();
+  },
 };
 
 export const todoRepo = {

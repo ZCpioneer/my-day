@@ -262,12 +262,21 @@ async function runTurn(mode: ChatMode, userText: string) {
   }
 }
 
+async function startRitual(mode: "morning" | "evening") {
+  await ready;
+  if (awaiting.value) return;
+  await chatRepo.clear(date.value);
+  chat.value = { date: date.value, messages: [] };
+  const opener = mode === "morning" ? "开始今天。" : "今天结束了。";
+  await runTurn(mode, opener);
+}
+
 function onMorning() {
-  void runTurn("morning", "开始今天。");
+  void startRitual("morning");
 }
 
 function onEvening() {
-  void runTurn("evening", "今天结束了。");
+  void startRitual("evening");
 }
 
 function onSend(text: string) {

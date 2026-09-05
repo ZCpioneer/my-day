@@ -4,10 +4,10 @@
       <div v-if="messages.length === 0 && !pendingPropose" class="empty">
         <div class="glyph">{{ period === "evening" ? "暮" : "朝" }}</div>
         <p v-if="period === 'evening'">
-          现在是回顾时段。<br />点「暮」开始今晚这一场，和早上的对话分开。<br />有没有做完，以待办勾选为准。
+          点「暮」会清空今晚这场对话，立刻按待办回顾。<br />只整理完成情况，不当陪聊。
         </p>
         <p v-else>
-          现在是开始时段。<br />点「朝」开今天这一场，把要做的事说出来。
+          点「朝」会清空今早这场对话，立刻按已有待办开始整理。<br />只把今天要做的事理清楚。
         </p>
       </div>
       <div
