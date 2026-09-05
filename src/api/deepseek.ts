@@ -27,6 +27,7 @@ export interface ChatCompletionRequest {
   tools: ToolDef[];
   tool_choice?: "auto";
   stream: false;
+  thinking?: { type: "disabled" };
 }
 
 export interface ChatCompletionResponse {
@@ -83,13 +84,18 @@ export async function chatCompletions(args: {
     model: request.model,
   });
 
+  const body: ChatCompletionRequest = {
+    ...request,
+    thinking: { type: "disabled" },
+  };
+
   const { status, json } = await postJson(
     CHAT_URL,
     {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    request,
+    body,
   );
 
   const durationMs = Date.now() - started;
@@ -98,7 +104,7 @@ export async function chatCompletions(args: {
     const raw = rawErrorMessage(json);
     debugLog.push({
       event: "http_fail",
-      detail: masked,
+      detail: raw,
       status,
       durationMs,
       model: request.model,

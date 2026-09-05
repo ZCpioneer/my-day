@@ -7,3 +7,4 @@ android/local.properties
 *.aab
 .DS_Store
 tsconfig.app.tsbuildinfo
+src/debug/default-key.ts

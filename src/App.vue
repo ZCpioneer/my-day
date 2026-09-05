@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { runAgent, type AgentDeps } from "@/agent/loop";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
@@ -100,27 +100,45 @@ const settings = ref<Settings>({
   debugOverlay: true,
 });
 const todos = ref<Todo[]>([]);
-const date = localDate();
-const chat = ref<DayChat>({ date, messages: [] });
+const date = ref(localDate());
+const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
 const awaiting = ref(false);
 const lastRitual = ref<ChatMode | null>(null);
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
 
-const dateLabel = formatDateLabel(date);
+const dateLabel = computed(() => formatDateLabel(date.value));
 
 function formatDateLabel(iso: string): string {
   const parts = iso.split("-");
   return `${Number(parts[1])}月${Number(parts[2])}日`;
 }
 
+async function loadDay(d: string) {
+  chat.value = await chatRepo.get(d);
+  daily.value = await logRepo.get(d);
+}
+
 const ready = (async () => {
   settings.value = await loadSettings();
   todos.value = await todoRepo.list();
-  chat.value = await chatRepo.get(date);
-  daily.value = await logRepo.get(date);
+  await loadDay(date.value);
 })();
+
+function onVisibilityChange() {
+  if (document.visibilityState !== "visible") return;
+  const next = localDate();
+  if (next === date.value) return;
+  date.value = next;
+  void (async () => {
+    await ready;
+    await loadDay(next);
+  })();
+}
+
+onMounted(() => document.addEventListener("visibilitychange", onVisibilityChange));
+onUnmounted(() => document.removeEventListener("visibilitychange", onVisibilityChange));
 
 async function complete(req: ChatCompletionRequest) {
   const key = effectiveApiKey(settings.value);
@@ -148,7 +166,7 @@ async function addTodos(items: ProposedTodo[]) {
 
 async function writeDailyLog(log: DailyLog) {
   await logRepo.put(log);
-  if (log.date === date) daily.value = log;
+  if (log.date === date.value) daily.value = log;
 }
 
 function onPropose(items: ProposedTodo[]): Promise<ProposedTodo[]> {
@@ -183,8 +201,8 @@ function onSkipPropose() {
 }
 
 async function appendMessage(msg: ChatMessage) {
-  await chatRepo.append(date, msg);
-  chat.value = await chatRepo.get(date);
+  await chatRepo.append(date.value, msg);
+  chat.value = await chatRepo.get(date.value);
 }
 
 async function runTurn(mode: ChatMode, userText: string) {

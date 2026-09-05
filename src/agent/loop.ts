@@ -53,9 +53,20 @@ function asProposedItems(raw: unknown): ProposedTodo[] | undefined {
   return out;
 }
 
+function isDoneToday(t: Todo, date: string): boolean {
+  return t.status === "done" && !!t.completedAt && localDate(new Date(t.completedAt)) === date;
+}
+
+function snapshotTodoTitles(todos: Todo[], date: string): { done: string[]; undone: string[] } {
+  return {
+    undone: todos.filter((t) => t.status === "open").map((t) => t.title),
+    done: todos.filter((t) => isDoneToday(t, date)).map((t) => t.title),
+  };
+}
+
 function formatTodos(todos: Todo[], date: string): string {
   const open = todos.filter((t) => t.status === "open");
-  const done = todos.filter((t) => t.status === "done");
+  const done = todos.filter((t) => isDoneToday(t, date));
   const openPart =
     open.length === 0
       ? "未完成 0 件"
@@ -108,16 +119,18 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
 
   if (name === "write_daily_log") {
     if (!parsed || typeof parsed !== "object") return "参数无效";
-    const o = parsed as { plan?: unknown; done?: unknown; undone?: unknown; state?: unknown };
-    if (typeof o.plan !== "string" || typeof o.state !== "string" || !isStringArray(o.done) || !isStringArray(o.undone)) {
+    const o = parsed as { plan?: unknown; state?: unknown };
+    if (typeof o.plan !== "string" || typeof o.state !== "string") {
       return "参数无效";
     }
     const now = deps.now();
+    const date = localDate(now);
+    const snap = snapshotTodoTitles(await deps.listTodos(), date);
     const log: DailyLog = {
-      date: localDate(now),
+      date,
       plan: o.plan,
-      done: o.done,
-      undone: o.undone,
+      done: snap.done,
+      undone: snap.undone,
       state: o.state,
       updatedAt: now.toISOString(),
     };
@@ -145,9 +158,7 @@ export async function runAgent(input: {
   const date = localDate(now);
   const todos = await deps.listTodos();
   const openTodos = todos.filter((t) => t.status === "open");
-  const doneToday = todos.filter(
-    (t) => t.status === "done" && t.completedAt && localDate(new Date(t.completedAt)) === date,
-  );
+  const doneToday = todos.filter((t) => isDoneToday(t, date));
 
   const messages: ApiMessage[] = [
     { role: "system", content: systemPrompt() },
