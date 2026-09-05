@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>朝暮 · 界面示意</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0c1014;
+      --ink-2: #141a22;
+      --panel: #1b222c;
+      --paper: #efe6d4;
+      --paper-dim: #cfc4ad;
+      --dawn: #e0b15a;
+      --dusk: #8ea0c8;
+      --clay: #c56b58;
+      --moss: #8aa07a;
+      --mute: #8b8376;
+      --line: rgba(239, 230, 212, 0.09);
+      --ease: cubic-bezier(0.32, 0.72, 0, 1);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: "Noto Sans SC", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #243044 0%, transparent 55%),
+        var(--ink);
+      color: var(--paper);
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 28px 16px;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 8;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%3An)'/%3E%3C/svg%3E");
+    }
+
+    .stage { width: min(100%, 420px); }
+
+    .kicker {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+      padding: 0 6px;
+      color: var(--mute);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+    .kicker b {
+      font-family: "Noto Serif SC", serif;
+      color: var(--paper);
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      font-size: 13px;
+    }
+
+    .phone-shell {
+      padding: 8px;
+      border-radius: 38px;
+      background: rgba(255,255,255,0.035);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        0 30px 80px rgba(0,0,0,0.45);
+    }
+    .phone {
+      position: relative;
+      height: min(780px, calc(100dvh - 96px));
+      border-radius: 30px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(224,177,90,0.07), transparent 22%),
+        var(--ink-2);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-top {
+      padding: 22px 20px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .brand {
+      font-family: "Noto Serif SC", serif;
+      font-size: 28px;
+      letter-spacing: 0.28em;
+      font-weight: 600;
+    }
+    .brand span { color: var(--dawn); }
+    .when {
+      text-align: right;
+      color: var(--mute);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .when em {
+      font-style: normal;
+      color: var(--paper-dim);
+      font-family: "Noto Serif SC", serif;
+      font-size: 13px;
+    }
+
+    .ritual {
+      flex: none;
+      margin: 8px 16px 0;
+      padding: 5px;
+      border-radius: 22px;
+      background: rgba(0,0,0,0.22);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .ritual button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--mute);
+      border-radius: 18px;
+      padding: 12px 10px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      font: inherit;
+      transition: transform 220ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
+    }
+    .ritual button strong {
+      font-family: "Noto Serif SC", serif;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+    }
+    .ritual button small {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+    .ritual button.active {
+      background: var(--panel);
+      color: var(--paper);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .ritual button.morning.active { color: var(--dawn); }
+    .ritual button.evening.active { color: var(--dusk); }
+    .ritual button:active { transform: scale(0.98); }
+    .ritual button:disabled { opacity: 0.45; cursor: default; }
+
+    .screens {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 280ms var(--ease), transform 280ms var(--ease);
+    }
+    .screen.on {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
+
+    .thread, .todo-scroll, .diary-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .thread::-webkit-scrollbar { width: 0; }
+
+    .empty {
+      margin: auto 8px;
+      text-align: center;
+      color: var(--mute);
+    }
+    .empty .glyph {
+      font-family: "Noto Serif SC", serif;
+      font-size: 42px;
+      color: var(--paper);
+      letter-spacing: 0.2em;
+      margin-bottom: 10px;
+    }
+    .empty p { font-size: 13px; line-height: 1.7; }
+
+    .msg {
+      max-width: 88%;
+      animation: rise 420ms var(--ease);
+    }
+    .msg.agent { align-self: flex-start; }
+    .msg.me { align-self: flex-end; }
+    .bubble {
+      padding: 11px 13px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .msg.agent .bubble {
+      background: var(--panel);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+      border-bottom-left-radius: 6px;
+    }
+    .msg.me .bubble {
+      background: #3a3124;
+      color: var(--paper);
+      border-bottom-right-radius: 6px;
+    }
+    .who {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: var(--mute);
+      margin: 0 4px 5px;
+    }
+    .msg.me .who { text-align: right; }
+
+    .propose {
+      align-self: stretch;
+      max-width: 100%;
+    }
+    .propose-shell {
+      padding: 5px;
+      border-radius: 20px;
+      background: rgba(224, 177, 90, 0.08);
+    }
+    .propose-core {
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 12px 12px 10px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+    .propose-core header {
+      font-size: 11px;
+      color: var(--dawn);
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+    .todo-pick {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 4px;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+    .todo-pick input { accent-color: var(--dawn); margin-top: 4px; }
+    .propose-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .propose-actions button {
+      flex: 1;
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+      border-radius: 999px;
+      padding: 9px 10px;
+      font-size: 13px;
+      transition: transform 180ms var(--ease);
+    }
+    .propose-actions button:active { transform: scale(0.98); }
+    .btn-yes { background: var(--dawn); color: #1a1408; font-weight: 600; }
+    .btn-no { background: rgba(255,255,255,0.05); color: var(--paper-dim); }
+
+    .composer {
+      padding: 8px 14px 6px;
+    }
+    .composer-shell {
+      padding: 4px;
+      border-radius: 22px;
+      background: rgba(0,0,0,0.28);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .composer input {
+      flex: 1;
+      border: 0;
+      background: var(--panel);
+      color: var(--paper);
+      border-radius: 18px;
+      padding: 11px 14px;
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    .send {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--dawn);
+      color: #1a1408;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: transform 180ms var(--ease);
+    }
+    .send:active { transform: scale(0.96); }
+    .hint {
+      text-align: center;
+      font-size: 10px;
+      color: var(--mute);
+      padding: 2px 0 4px;
+    }
+
+    .dock-wrap {
+      padding: 6px 16px calc(10px + var(--safe-b));
+    }
+    .dock {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      padding: 5px;
+      border-radius: 24px;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(16px);
+    }
+    .dock button {
+      border: 0;
+      background: transparent;
+      color: var(--mute);
+      font: inherit;
+      padding: 10px 0 8px;
+      border-radius: 18px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      transition: background 220ms var(--ease), color 220ms var(--ease), transform 180ms var(--ease);
+    }
+    .dock button svg { width: 18px; height: 18px; }
+    .dock button.on {
+      background: var(--panel);
+      color: var(--paper);
+    }
+    .dock button:active { transform: scale(0.98); }
+
+    .todo-head, .diary-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .todo-head h2, .diary-head h2 {
+      font-family: "Noto Serif SC", serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+    }
+    .count { color: var(--dawn); font-size: 13px; }
+
+    .item {
+      display: flex;
+      gap: 12px;
+      padding: 14px 12px;
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+      cursor: pointer;
+      align-items: flex-start;
+    }
+    .box {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      margin-top: 2px;
+      flex: none;
+      background: rgba(255,255,255,0.04);
+      box-shadow: inset 0 0 0 1px rgba(239,230,212,0.18);
+      display: grid;
+      place-items: center;
+    }
+    .item.done .box {
+      background: var(--moss);
+      box-shadow: none;
+    }
+    .item.done p { color: var(--mute); text-decoration: line-through; }
+    .item p { font-size: 14px; line-height: 1.5; }
+    .item .meta { font-size: 11px; color: var(--mute); margin-top: 4px; }
+    .section-label {
+      font-size: 11px;
+      color: var(--mute);
+      letter-spacing: 0.16em;
+      padding: 6px 4px 0;
+    }
+
+    .log-card {
+      padding: 5px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.03);
+    }
+    .log-core {
+      background: #221c16;
+      border-radius: 20px;
+      padding: 18px 16px 16px;
+      box-shadow: inset 0 1px 0 rgba(224,177,90,0.18);
+    }
+    .log-core h3 {
+      font-family: "Noto Serif SC", serif;
+      font-size: 20px;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+    .log-block { margin-bottom: 14px; }
+    .log-block .lab {
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      color: var(--dawn);
+      margin-bottom: 6px;
+    }
+    .log-block p, .log-block li {
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: var(--paper-dim);
+    }
+    .log-block ul { padding-left: 1.1em; }
+    .mood {
+      margin-top: 4px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.25);
+      color: var(--paper);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .typing .bubble { color: var(--mute); letter-spacing: 0.2em; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @media (max-width: 520px) {
+      body { padding: 0; }
+      .kicker { display: none; }
+      .phone-shell { padding: 0; border-radius: 0; box-shadow: none; }
+      .phone { height: 100dvh; border-radius: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="kicker">
+      <b>朝暮</b>
+      <span>可点示意 · 不是真 AI</span>
+    </div>
+    <div class="phone-shell">
+      <div class="phone">
+        <header class="app-top">
+          <div class="brand">朝<span>暮</span></div>
+          <div class="when">
+            <em>九月五日</em><br />周六 · 该对照一天了
+          </div>
+        </header>
+
+        <div class="screens">
+          <section class="screen on" id="screen-chat" data-screen="chat">
+            <div class="ritual">
+              <button class="morning" id="btnMorning" type="button">
+                <strong>朝</strong>
+                <small>开始今天</small>
+              </button>
+              <button class="evening" id="btnEvening" type="button">
+                <strong>暮</strong>
+                <small>回顾今天</small>
+              </button>
+            </div>
+            <div class="thread" id="thread">
+              <div class="empty" id="chatEmpty">
+                <div class="glyph">朝 / 暮</div>
+                <p>点上面「朝」开始今天。<br />白天想到什么就丢进来。<br />晚上点「暮」，对照 Todo 做回顾。</p>
+              </div>
+            </div>
+            <div class="composer">
+              <div class="composer-shell">
+                <input id="input" type="text" placeholder="想到什么，直接说…" autocomplete="off" />
+                <button class="send" id="send" type="button" aria-label="发送">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </button>
+              </div>
+              <div class="hint">示意里发送会接一段预写的回复</div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-todo" data-screen="todo">
+            <div class="todo-scroll">
+              <div class="todo-head">
+                <h2>今日</h2>
+                <div class="count" id="todoCount">0 / 0</div>
+              </div>
+              <div class="section-label">还没做</div>
+              <div id="todoOpen"></div>
+              <div class="section-label">已经勾掉</div>
+              <div id="todoDone"></div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-diary" data-screen="diary">
+            <div class="diary-scroll">
+              <div class="diary-head">
+                <h2>日记</h2>
+                <div class="count">只记今天</div>
+              </div>
+              <div id="diaryBody"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="dock-wrap">
+          <nav class="dock">
+            <button class="on" data-nav="chat" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M5 7.5h14M5 12h9M5 16.5h11" />
+              </svg>
+              对话
+            </button>
+            <button data-nav="todo" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="5" y="5" width="14" height="14" rx="3" />
+                <path d="M8 12l2.5 2.5L16 9" />
+              </svg>
+              待办
+            </button>
+            <button data-nav="diary" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M7 4.5h10v15H7z" />
+                <path d="M9.5 8h5M9.5 12h5M9.5 16h3" />
+              </svg>
+              日记
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const thread = $("thread");
+    const chatEmpty = $("chatEmpty");
+    const input = $("input");
+    const todos = [
+      { id: "alipay", title: "整理支付宝调试问题并发群里询问", meta: "昨天留下的", done: false, confirmed: true },
+      { id: "weekly", title: "把周报发给组里", meta: "昨天留下的", done: false, confirmed: true },
+    ];
+    let morningDone = false;
+    let eveningDone = false;
+    let diaryReady = false;
+    let awaiting = false;
+
+    function go(name) {
+      document.querySelectorAll(".screen").forEach((el) => el.classList.toggle("on", el.dataset.screen === name));
+      document.querySelectorAll(".dock button").forEach((el) => el.classList.toggle("on", el.dataset.nav === name));
+    }
+
+    document.querySelectorAll("[data-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => go(btn.dataset.nav));
+    });
+
+    function hideEmpty() {
+      if (chatEmpty) chatEmpty.remove();
+    }
+
+    function addMsg(role, text) {
+      hideEmpty();
+      const wrap = document.createElement("div");
+      wrap.className = `msg ${role}`;
+      wrap.innerHTML = `<div class="who">${role === "me" ? "我" : "朝暮"}</div><div class="bubble">${text}</div>`;
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      return wrap;
+    }
+
+    function addTyping() {
+      const wrap = document.createElement("div");
+      wrap.className = "msg agent typing";
+      wrap.innerHTML = `<div class="who">朝暮</div><div class="bubble">···</div>`;
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      return wrap;
+    }
+
+    async function say(text, delay = 550) {
+      const t = addTyping();
+      await wait(delay);
+      t.remove();
+      addMsg("agent", text);
+    }
+
+    function wait(ms) {
+      return new Promise((r) => setTimeout(r, ms));
+    }
+
+    function renderTodos() {
+      const open = todos.filter((t) => t.confirmed && !t.done);
+      const done = todos.filter((t) => t.confirmed && t.done);
+      $("todoOpen").innerHTML = open.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">没有未做的事了。</p>`;
+      $("todoDone").innerHTML = done.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">还没勾过。</p>`;
+      $("todoCount").textContent = `${done.length} / ${open.length + done.length}`;
+      $("todoOpen").querySelectorAll(".item").forEach(bindItem);
+      $("todoDone").querySelectorAll(".item").forEach(bindItem);
+      renderDiary();
+    }
+
+    function itemHtml(t) {
+      return `<div class="item ${t.done ? "done" : ""}" data-id="${t.id}">
+        <div class="box">${t.done ? "✓" : ""}</div>
+        <div><p>${t.title}</p><div class="meta">${t.meta}</div></div>
+      </div>`;
+    }
+
+    function bindItem(el) {
+      el.addEventListener("click", () => {
+        const t = todos.find((x) => x.id === el.dataset.id);
+        t.done = !t.done;
+        renderTodos();
+      });
+    }
+
+    function addPropose(items) {
+      hideEmpty();
+      const wrap = document.createElement("div");
+      wrap.className = "msg agent propose";
+      wrap.innerHTML = `<div class="who">待确认</div>
+        <div class="propose-shell"><div class="propose-core">
+          <header>要从对话里加到 Todo 吗？</header>
+          ${items.map((it, i) => `<label class="todo-pick"><input type="checkbox" checked data-i="${i}" /> ${it.title}</label>`).join("")}
+          <div class="propose-actions">
+            <button class="btn-yes" type="button">确认加入</button>
+            <button class="btn-no" type="button">这次不加</button>
+          </div>
+        </div></div>`;
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      wrap.querySelector(".btn-yes").onclick = () => {
+        wrap.querySelectorAll("input:checked").forEach((box) => {
+          const it = items[Number(box.dataset.i)];
+          if (!todos.some((t) => t.title === it.title)) {
+            todos.push({ id: it.id, title: it.title, meta: "刚从对话确认", done: false, confirmed: true });
+          }
+        });
+        wrap.querySelector(".propose-core").innerHTML = `<header>已加入今日 Todo</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">去「待办」页就能勾。没有你点确认的，我不会自己加。</p>`;
+        renderTodos();
+      };
+      wrap.querySelector(".btn-no").onclick = () => {
+        wrap.querySelector(".propose-core").innerHTML = `<header>先不加</header><p style="font-size:13px;color:var(--paper-dim)">好。还是想法的话，晚上回顾时我再问你。</p>`;
+      };
+    }
+
+    function renderDiary() {
+      const body = $("diaryBody");
+      if (!diaryReady) {
+        body.innerHTML = `<div class="empty"><div class="glyph">暮</div><p>晚上点「暮」聊完之后，今天的记录会出现在这里。<br />周 / 月 / 年第一版不做。</p></div>`;
+        return;
+      }
+      const open = todos.filter((t) => t.confirmed && !t.done);
+      const done = todos.filter((t) => t.confirmed && t.done);
+      body.innerHTML = `<div class="log-card"><div class="log-core">
+        <h3>九月五日</h3>
+        <div class="log-block"><div class="lab">早计划</div>
+          <p>先拿下支付宝调试，水电费顺手转，周报放到晚上。</p></div>
+        <div class="log-block"><div class="lab">做成了</div>
+          <ul>${done.map((t) => `<li>${t.title}</li>`).join("") || "<li>还没有勾掉的。</li>"}</ul></div>
+        <div class="log-block"><div class="lab">没做完</div>
+          <ul>${open.map((t) => `<li>${t.title}</li>`).join("") || "<li>全部勾完了。</li>"}</ul></div>
+        <div class="log-block"><div class="lab">状态 · 你不用另写</div>
+          <div class="mood">下午被调试拖住，有点烦，也确实在啃硬的。水电费是忘了，不是做不到。明天朝那一轮第一句会再提起。</div>
+        </div>
+      </div></div>`;
+    }
+
+    $("btnMorning").addEventListener("click", async () => {
+      if (awaiting || morningDone) return;
+      awaiting = true;
+      $("btnMorning").classList.add("active");
+      go("chat");
+      const leftover = todos.filter((t) => t.confirmed && !t.done);
+      addMsg("me", "开始今天。");
+      await say(`早。昨天还剩 ${leftover.length} 件没勾完：${leftover.map((t) => t.title.replace(/整理|把/g, "")).join("、")}。今天最想先拿下哪件？`);
+      await wait(380);
+      addMsg("me", "支付宝那个必须今天弄完。另外突然想起还要给房东转水电费。");
+      await say("那今天我建议这个顺序：1. 支付宝调试，有人等；2. 水电费，五分钟能做完；3. 周报可以放到晚上。你觉得没问题，我们就按这个走。");
+      addPropose([{ id: "water", title: "给房东转水电费" }]);
+      morningDone = true;
+      awaiting = false;
+    });
+
+    $("btnEvening").addEventListener("click", async () => {
+      if (awaiting) return;
+      awaiting = true;
+      $("btnEvening").classList.add("active");
+      go("chat");
+      const open = todos.filter((t) => t.confirmed && !t.done);
+      const done = todos.filter((t) => t.confirmed && t.done);
+      addMsg("me", "今天结束了。");
+      await say(`晚上了。今天 ${done.length + open.length} 件事，你勾了 ${done.length} 件。${open.length ? "还没动的是：" + open.map((t) => t.title).join("、") + "。" : "都勾完了。"}怎么了？`);
+      await wait(400);
+      addMsg("me", "调试卡了一下午。水电费忘了。有点烦。");
+      await say("下午啃硬的很正常。水电费还在列表里，明天朝那一轮我第一句会再提。周报如果只是同步进度，写三行就够，不必完美。要不要我把今天写成一篇记录？");
+      await wait(280);
+      diaryReady = true;
+      eveningDone = true;
+      renderDiary();
+      await say("今日记录已经放进「日记」了。里面有计划、做成了什么、没做完什么，还有一段今天的状态。你不用另写。");
+      awaiting = false;
+    });
+
+    async function sendFree() {
+      const text = input.value.trim();
+      if (!text || awaiting) return;
+      input.value = "";
+      addMsg("me", text);
+      awaiting = true;
+      if (/周报|水电|任务|todo|要做|记得/.test(text)) {
+        await say("我听到一件可能要做的事。加不加由你点，我不会自己放进列表。");
+        addPropose([{ id: "misc-" + Date.now(), title: text.slice(0, 28) }]);
+      } else {
+        await say("记下了。如果你只是在理清想法，我们就继续聊；一旦你说出要做的动作，我会弹确认框。");
+      }
+      awaiting = false;
+    }
+
+    $("send").addEventListener("click", sendFree);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendFree();
+    });
+
+    renderTodos();
+  </script>
+</body>
+</html>
