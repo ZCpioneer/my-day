@@ -68,7 +68,7 @@
 import { ref } from "vue";
 import { runAgent, type AgentDeps } from "@/agent/loop";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
-import { browserPostJson } from "@/api/post-json";
+import { activePostJson } from "@/api/post-json";
 import RitualBar from "@/components/RitualBar.vue";
 import DebugPanel from "@/components/DebugPanel.vue";
 import ChatScreen from "@/screens/ChatScreen.vue";
@@ -128,7 +128,7 @@ async function complete(req: ChatCompletionRequest) {
     debugLog.push({ event: "http_fail", detail: "no key", status: 401 });
     throw new ApiError("no key", 401, "去设置里粘贴 DeepSeek API Key");
   }
-  return chatCompletions({ apiKey: key, request: req, postJson: browserPostJson });
+  return chatCompletions({ apiKey: key, request: req, postJson: activePostJson() });
 }
 
 async function addTodos(items: ProposedTodo[]) {

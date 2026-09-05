@@ -3,4 +3,7 @@ dist
 android/app/build
 android/.gradle
 android/local.properties
+*.apk
+*.aab
 .DS_Store
+tsconfig.app.tsbuildinfo
