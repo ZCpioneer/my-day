@@ -16,6 +16,11 @@
           <option value="deepseek-v4-pro">deepseek-v4-pro</option>
         </select>
       </label>
+      <label class="field">
+        <span>朝暮分界（小时）</span>
+        <input v-model.number="draft.daySplitHour" type="number" min="0" max="23" step="1" />
+        <p class="hint">这个点之前算朝（开始），到了这个点及以后算暮（结束）。默认 12，即上午开始、下午结束。</p>
+      </label>
       <button class="btn-save" type="button" @click="onSave">保存</button>
       <DebugPanel />
     </div>
@@ -41,6 +46,7 @@ watch(
 );
 
 function onSave() {
-  emit("save", { ...draft.value });
+  const hour = Number(draft.value.daySplitHour);
+  emit("save", { ...draft.value, daySplitHour: Number.isFinite(hour) ? hour : 12 });
 }
 </script>

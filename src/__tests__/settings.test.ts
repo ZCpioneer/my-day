@@ -19,22 +19,30 @@ describe("settings", () => {
     expect(s.model).toBe(DEFAULT_MODEL);
     expect(s.debugOverlay).toBe(false);
     expect(s.apiKey).toBe("");
+    expect(s.daySplitHour).toBe(12);
   });
 
   it("roundtrips", async () => {
     mem.clear();
-    await saveSettings({ apiKey: "sk-user", model: "deepseek-v4-pro", debugOverlay: false }, prefs);
+    await saveSettings(
+      { apiKey: "sk-user", model: "deepseek-v4-pro", debugOverlay: false, daySplitHour: 18 },
+      prefs,
+    );
     const s = await loadSettings(prefs);
     expect(s.apiKey).toBe("sk-user");
     expect(s.model).toBe("deepseek-v4-pro");
     expect(s.debugOverlay).toBe(false);
+    expect(s.daySplitHour).toBe(18);
   });
 });
 
 describe("effectiveApiKey", () => {
   it("uses settings then default", () => {
-    expect(effectiveApiKey({ apiKey: "", model: DEFAULT_MODEL, debugOverlay: true }, "sk-debug")).toBe(
-      "sk-debug",
-    );
+    expect(
+      effectiveApiKey(
+        { apiKey: "", model: DEFAULT_MODEL, debugOverlay: true, daySplitHour: 12 },
+        "sk-debug",
+      ),
+    ).toBe("sk-debug");
   });
 });

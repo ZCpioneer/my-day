@@ -2,8 +2,13 @@
   <section class="screen on">
     <div ref="threadEl" class="thread">
       <div v-if="messages.length === 0 && !pendingPropose" class="empty">
-        <div class="glyph">朝 / 暮</div>
-        <p>点上面「朝」开始今天。<br />白天想到什么就丢进来。<br />晚上点「暮」，对照 Todo 做回顾。</p>
+        <div class="glyph">{{ period === "evening" ? "暮" : "朝" }}</div>
+        <p v-if="period === 'evening'">
+          现在是回顾时段。<br />点「暮」开始今晚这一场，和早上的对话分开。<br />有没有做完，以待办勾选为准。
+        </p>
+        <p v-else>
+          现在是开始时段。<br />点「朝」开今天这一场，把要做的事说出来。
+        </p>
       </div>
       <div
         v-for="m in messages"
@@ -54,6 +59,7 @@ const props = defineProps<{
   messages: ChatMessage[];
   awaiting: boolean;
   pendingPropose: ProposedTodo[] | null;
+  period: "morning" | "evening";
 }>();
 
 const emit = defineEmits<{

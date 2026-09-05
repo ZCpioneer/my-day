@@ -1,32 +1,12 @@
 import type { ApiMessage } from "@/api/deepseek";
+import { sessionMessages } from "@/ritual";
 import type { ChatMessage, ChatMode, Todo } from "@/types";
 
 const RECENT_MESSAGES = 16;
-const MAX_MESSAGES = 40;
 
-function isRitual(m: ChatMessage): boolean {
-  return m.mode === "morning" || m.mode === "evening";
-}
-
-function selectHistory(messages: ChatMessage[]): ChatMessage[] {
-  const n = messages.length;
-  const keep = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    if (isRitual(messages[i])) keep.add(i);
-  }
-  for (let i = Math.max(0, n - RECENT_MESSAGES); i < n; i++) keep.add(i);
-  let selected = messages.filter((_, i) => keep.has(i));
-  if (selected.length > MAX_MESSAGES) {
-    let extra = selected.length - MAX_MESSAGES;
-    selected = selected.filter((m) => {
-      if (!isRitual(m) && extra > 0) {
-        extra--;
-        return false;
-      }
-      return true;
-    });
-  }
-  return selected;
+function selectHistory(messages: ChatMessage[], mode: ChatMode): ChatMessage[] {
+  const mine = sessionMessages(messages, mode);
+  return mine.slice(-RECENT_MESSAGES);
 }
 
 function modeLabel(mode: ChatMode): string {
@@ -60,8 +40,9 @@ export function buildContextMessages(input: {
     `今天是 ${input.date}，${input.timeLabel}。当前模式：${modeLabel(input.mode)}。`,
     formatOpen(input.openTodos, input.date),
     formatDone(input.doneToday),
+    "待办列表是唯一真相。有没有完成，只看上面的未完成/已完成，不要根据聊天记录判断。",
   ].join("");
-  const history: ApiMessage[] = selectHistory(input.messages).map((m) => ({
+  const history: ApiMessage[] = selectHistory(input.messages, input.mode).map((m) => ({
     role: m.role,
     content: m.content,
   }));

@@ -1,0 +1,105 @@
+import { describe, it, expect } from "vitest";
+import { buildContextMessages } from "@/agent/context";
+import { clampSplitHour, ritualForHour, sessionMessages, sessionOf } from "@/ritual";
+import type { ChatMessage, Todo } from "@/types";
+
+describe("ritualForHour", () => {
+  it("treats hours before 12 as morning and 12+ as evening", () => {
+    expect(ritualForHour(0, 12)).toBe("morning");
+    expect(ritualForHour(11, 12)).toBe("morning");
+    expect(ritualForHour(12, 12)).toBe("evening");
+    expect(ritualForHour(23, 12)).toBe("evening");
+  });
+
+  it("respects a custom split", () => {
+    expect(ritualForHour(13, 18)).toBe("morning");
+    expect(ritualForHour(18, 18)).toBe("evening");
+  });
+
+  it("clamps split hour", () => {
+    expect(clampSplitHour(-3)).toBe(0);
+    expect(clampSplitHour(30)).toBe(23);
+  });
+});
+
+describe("sessionMessages", () => {
+  const morning: ChatMessage = {
+    id: "1",
+    role: "user",
+    content: "开始今天。",
+    createdAt: "2026-09-05T01:00:00.000Z",
+    mode: "morning",
+  };
+  const evening: ChatMessage = {
+    id: "2",
+    role: "user",
+    content: "今天结束了。",
+    createdAt: "2026-09-05T14:00:00.000Z",
+    mode: "evening",
+  };
+  const leftover: ChatMessage = {
+    id: "3",
+    role: "user",
+    content: "白天随口说",
+    createdAt: "2026-09-05T03:00:00.000Z",
+    mode: "chat",
+  };
+
+  it("keeps untagged chat in morning so it does not leak into evening", () => {
+    expect(sessionOf(leftover)).toBe("morning");
+    expect(sessionMessages([morning, leftover, evening], "evening").map((m) => m.id)).toEqual(["2"]);
+    expect(sessionMessages([morning, leftover, evening], "morning").map((m) => m.id)).toEqual(["1", "3"]);
+  });
+});
+
+describe("buildContextMessages", () => {
+  it("does not send morning chat into an evening turn", () => {
+    const open: Todo[] = [
+      {
+        id: "t1",
+        title: "周报",
+        status: "open",
+        sourceDate: "2026-09-05",
+        createdAt: "2026-09-05T01:00:00.000Z",
+      },
+    ];
+    const done: Todo[] = [
+      {
+        id: "t2",
+        title: "支付宝调试",
+        status: "done",
+        sourceDate: "2026-09-05",
+        createdAt: "2026-09-05T01:00:00.000Z",
+        completedAt: "2026-09-05T10:00:00.000Z",
+      },
+    ];
+    const msgs: ChatMessage[] = [
+      {
+        id: "m1",
+        role: "user",
+        content: "支付宝必须今天弄完",
+        createdAt: "2026-09-05T01:00:00.000Z",
+        mode: "morning",
+      },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "那就先做支付宝",
+        createdAt: "2026-09-05T01:01:00.000Z",
+        mode: "morning",
+      },
+    ];
+    const out = buildContextMessages({
+      date: "2026-09-05",
+      timeLabel: "下午 15:00",
+      mode: "evening",
+      openTodos: open,
+      doneToday: done,
+      messages: msgs,
+    });
+    const blob = JSON.stringify(out);
+    expect(blob).not.toContain("支付宝必须今天弄完");
+    expect(blob).toContain("今日已完成 1 件：支付宝调试");
+    expect(blob).toContain("待办列表是唯一真相");
+  });
+});

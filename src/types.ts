@@ -37,6 +37,8 @@ export interface Settings {
   apiKey: string;
   model: string;
   debugOverlay: boolean;
+  /** 0–23. Hours before this are 朝; this hour and after are 暮. */
+  daySplitHour: number;
 }
 
 export type DebugEvent =

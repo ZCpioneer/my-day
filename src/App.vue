@@ -19,16 +19,17 @@
       <RitualBar
         v-if="tab === 'chat'"
         :disabled="awaiting"
-        :morning-active="lastRitual === 'morning'"
-        :evening-active="lastRitual === 'evening'"
+        :morning-active="activeSession === 'morning'"
+        :evening-active="activeSession === 'evening'"
         @morning="onMorning"
         @evening="onEvening"
       />
       <ChatScreen
         v-if="tab === 'chat'"
-        :messages="chat.messages"
+        :messages="sessionThread"
         :awaiting="awaiting"
         :pending-propose="pendingPropose"
+        :period="activeSession"
         @send="onSend"
         @confirm="onConfirmPropose"
         @skip="onSkipPropose"
@@ -77,6 +78,7 @@ import SettingsScreen from "@/screens/SettingsScreen.vue";
 import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
+import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow, sessionMessages } from "@/ritual";
 import { chatRepo, logRepo, todoRepo } from "@/storage/db";
 import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
 import {
@@ -97,6 +99,7 @@ const settings = ref<Settings>({
   apiKey: "",
   model: DEFAULT_MODEL,
   debugOverlay: false,
+  daySplitHour: DEFAULT_SPLIT_HOUR,
 });
 const todos = ref<Todo[]>([]);
 const date = ref(localDate());
@@ -104,10 +107,11 @@ const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
 const awaiting = ref(false);
-const lastRitual = ref<ChatMode | null>(null);
+const activeSession = ref<"morning" | "evening">(ritualForNow());
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
 
 const dateLabel = computed(() => formatDateLabel(date.value));
+const sessionThread = computed(() => sessionMessages(chat.value.messages, activeSession.value));
 
 function formatDateLabel(iso: string): string {
   const parts = iso.split("-");
@@ -121,6 +125,7 @@ async function loadDay(d: string) {
 
 const ready = (async () => {
   settings.value = await loadSettings();
+  activeSession.value = ritualForNow(new Date(), settings.value.daySplitHour);
   todos.value = await todoRepo.list();
   await loadDay(date.value);
 })();
@@ -128,8 +133,13 @@ const ready = (async () => {
 function onVisibilityChange() {
   if (document.visibilityState !== "visible") return;
   const next = localDate();
-  if (next === date.value) return;
+  const session = ritualForNow(new Date(), settings.value.daySplitHour);
+  if (next === date.value) {
+    if (!awaiting.value) activeSession.value = session;
+    return;
+  }
   date.value = next;
+  activeSession.value = session;
   void (async () => {
     await ready;
     await loadDay(next);
@@ -208,8 +218,10 @@ async function runTurn(mode: ChatMode, userText: string) {
   await ready;
   if (awaiting.value) return;
   awaiting.value = true;
-  if (mode === "morning" || mode === "evening") lastRitual.value = mode;
-  const history = chat.value.messages.slice();
+  if (mode === "morning" || mode === "evening") activeSession.value = mode;
+  const session = mode === "evening" ? "evening" : "morning";
+  activeSession.value = session;
+  const history = sessionMessages(chat.value.messages, session);
   try {
     await appendMessage({
       id: newId(),
@@ -259,7 +271,7 @@ function onEvening() {
 }
 
 function onSend(text: string) {
-  void runTurn("chat", text);
+  void runTurn(activeSession.value, text);
 }
 
 async function onToggle(id: string) {
@@ -270,7 +282,9 @@ async function onToggle(id: string) {
 
 async function onSaveSettings(next: Settings) {
   await ready;
-  await saveSettings(next);
-  settings.value = next;
+  const saved = { ...next, daySplitHour: clampSplitHour(next.daySplitHour) };
+  await saveSettings(saved);
+  settings.value = saved;
+  if (!awaiting.value) activeSession.value = ritualForNow(new Date(), saved.daySplitHour);
 }
 </script>

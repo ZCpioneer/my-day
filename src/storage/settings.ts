@@ -3,6 +3,7 @@ import { Preferences } from "@capacitor/preferences";
 import { DEFAULT_MODEL, type Settings } from "../types";
 import { resolveApiKey } from "../keys";
 import { DEFAULT_DEBUG_KEY } from "../debug/default-key";
+import { clampSplitHour, DEFAULT_SPLIT_HOUR } from "../ritual";
 
 const KEY = "zhaomu.settings";
 
@@ -36,12 +37,15 @@ function defaultPrefs(): Prefs {
 
 export async function loadSettings(prefs: Prefs = defaultPrefs()): Promise<Settings> {
   const raw = await prefs.get(KEY);
-  if (!raw) return { apiKey: "", model: DEFAULT_MODEL, debugOverlay: false };
+  if (!raw) {
+    return { apiKey: "", model: DEFAULT_MODEL, debugOverlay: false, daySplitHour: DEFAULT_SPLIT_HOUR };
+  }
   const parsed = JSON.parse(raw) as Partial<Settings>;
   return {
     apiKey: parsed.apiKey ?? "",
     model: parsed.model || DEFAULT_MODEL,
     debugOverlay: parsed.debugOverlay ?? false,
+    daySplitHour: clampSplitHour(parsed.daySplitHour ?? DEFAULT_SPLIT_HOUR),
   };
 }
 
