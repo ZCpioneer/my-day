@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { CATCH_UP_LOOKBACK_DAYS, hasDiaryTraces, pickCatchUpDate } from "@/diary";
-import type { DayChat, Todo } from "@/types";
+import { CATCH_UP_LOOKBACK_DAYS, catchUpDiary, hasDiaryTraces, pickCatchUpDate } from "@/diary";
+import type { DailyLog, DayChat, Todo } from "@/types";
 
 function chat(over: Partial<DayChat> & Pick<DayChat, "date">): DayChat {
   return { messages: [], ...over };
@@ -78,5 +78,113 @@ describe("pickCatchUpDate", () => {
       hasTraces: async () => false,
     });
     expect(picked).toBeNull();
+  });
+});
+
+describe("catchUpDiary", () => {
+  const yesterdayChat: DayChat = {
+    date: "2026-09-04",
+    messages: [
+      { id: "m1", role: "user", content: "hi", createdAt: "2026-09-04T01:00:00.000Z" },
+    ],
+  };
+  const log: DailyLog = {
+    date: "2026-09-04",
+    plan: "先做支付宝",
+    done: ["支付宝"],
+    undone: ["周报"],
+    state: "还行",
+    updatedAt: "2026-09-05T00:01:00.000Z",
+  };
+
+  it("writes the picked day and does not touch todos", async () => {
+    const logs = new Map<string, DailyLog>();
+    const chats = new Map<string, DayChat>([["2026-09-04", yesterdayChat]]);
+    const todos: Todo[] = [
+      {
+        id: "t1",
+        title: "周报",
+        status: "open",
+        sourceDate: "2026-09-04",
+        createdAt: "2026-09-04T01:00:00.000Z",
+        when: "today",
+      },
+    ];
+    const wrote = await catchUpDiary({
+      today: "2026-09-05",
+      hasKey: true,
+      getChat: async (d) => chats.get(d) ?? { date: d, messages: [] },
+      listTodos: async () => todos,
+      getLog: async (d) => logs.get(d) ?? null,
+      putLog: async (row) => {
+        logs.set(row.date, row);
+      },
+      compose: async (d) => ({ ...log, date: d }),
+    });
+    expect(wrote).toBe("2026-09-04");
+    expect(logs.get("2026-09-04")?.plan).toBe("先做支付宝");
+    expect(todos[0].when).toBe("today");
+    expect(todos[0].status).toBe("open");
+  });
+
+  it("skips when there is no key", async () => {
+    let composed = 0;
+    const wrote = await catchUpDiary({
+      today: "2026-09-05",
+      hasKey: false,
+      getChat: async (d) => (d === "2026-09-04" ? yesterdayChat : { date: d, messages: [] }),
+      listTodos: async () => [],
+      getLog: async () => null,
+      putLog: async () => {
+        throw new Error("should not write");
+      },
+      compose: async () => {
+        composed += 1;
+        return log;
+      },
+    });
+    expect(wrote).toBeNull();
+    expect(composed).toBe(0);
+  });
+
+  it("does not overwrite an existing log", async () => {
+    const logs = new Map<string, DailyLog>([["2026-09-04", { ...log, plan: "已经有了" }]]);
+    let composed = 0;
+    const wrote = await catchUpDiary({
+      today: "2026-09-05",
+      hasKey: true,
+      getChat: async (d) => (d === "2026-09-04" ? yesterdayChat : { date: d, messages: [] }),
+      listTodos: async () => [],
+      getLog: async (d) => logs.get(d) ?? null,
+      putLog: async (row) => {
+        logs.set(row.date, row);
+      },
+      compose: async () => {
+        composed += 1;
+        return { ...log, plan: "新的" };
+      },
+    });
+    expect(wrote).toBeNull();
+    expect(composed).toBe(0);
+    expect(logs.get("2026-09-04")?.plan).toBe("已经有了");
+  });
+
+  it("skips put when compose throws", async () => {
+    const logs = new Map<string, DailyLog>();
+    const wrote = await catchUpDiary({
+      today: "2026-09-05",
+      hasKey: true,
+      getChat: async (d) => (d === "2026-09-04" ? yesterdayChat : { date: d, messages: [] }),
+      listTodos: async () => [],
+      getLog: async (d) => logs.get(d) ?? null,
+      putLog: async (row) => {
+        logs.set(row.date, row);
+      },
+      compose: async () => {
+        throw new Error("日记这轮没写成");
+      },
+    });
+    expect(wrote).toBeNull();
+    expect(logs.size).toBe(0);
   });
 });

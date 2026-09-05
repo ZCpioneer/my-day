@@ -25,7 +25,7 @@ export async function pickCatchUpDate(input: {
   return null;
 }
 
-export async function catchUpDiary(_input: {
+export async function catchUpDiary(input: {
   today: string;
   hasKey: boolean;
   getChat: (date: string) => Promise<DayChat>;
@@ -34,5 +34,19 @@ export async function catchUpDiary(_input: {
   putLog: (log: DailyLog) => Promise<void>;
   compose: (date: string) => Promise<DailyLog>;
 }): Promise<string | null> {
-  return null;
+  if (!input.hasKey) return null;
+  const todos = await input.listTodos();
+  const date = await pickCatchUpDate({
+    today: input.today,
+    hasLog: async (d) => (await input.getLog(d)) !== null,
+    hasTraces: async (d) => hasDiaryTraces({ chat: await input.getChat(d), todos, date: d }),
+  });
+  if (!date) return null;
+  try {
+    const log = await input.compose(date);
+    await input.putLog(log);
+    return date;
+  } catch {
+    return null;
+  }
 }
