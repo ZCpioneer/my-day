@@ -3,14 +3,24 @@ import { mount } from "@vue/test-utils";
 import App from "@/App.vue";
 
 describe("ritual visibility", () => {
-  it("shows 朝/暮 only on chat tab", async () => {
+  it("shows 自动整理 only on chat tab", async () => {
     const w = mount(App);
-    expect(w.text()).toContain("开始今天");
-    expect(w.text()).toContain("回顾今天");
+    expect(w.text()).toContain("自动整理");
     await w.get("[data-nav=todo]").trigger("click");
-    expect(w.text()).not.toContain("开始今天");
+    expect(w.text()).not.toContain("自动整理");
     await w.get("[data-nav=chat]").trigger("click");
-    expect(w.text()).toContain("开始今天");
+    expect(w.text()).toContain("自动整理");
+  });
+
+  it("shows 整理成日记 on the diary tab and keeps 自动整理 on chat", async () => {
+    const w = mount(App);
+    expect(w.text()).toContain("自动整理");
+    expect(w.text()).toContain("刷新今天的待办");
+    await w.get("[data-nav=diary]").trigger("click");
+    expect(w.text()).toContain("整理成日记");
+    expect(w.text()).not.toContain("自动整理");
+    await w.get("[data-nav=chat]").trigger("click");
+    expect(w.text()).toContain("自动整理");
   });
 
   it("keeps debug off the chat screen and opens settings from the gear", async () => {

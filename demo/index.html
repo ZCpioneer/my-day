@@ -68,6 +68,40 @@
       font-size: 13px;
     }
 
+    .tidy {
+      height: 40px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(142, 160, 200, 0.16);
+      color: var(--dusk);
+      cursor: pointer;
+      font-family: "Noto Serif SC", serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      flex: none;
+      white-space: nowrap;
+      transition: transform 180ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
+    }
+    .tidy:active { transform: scale(0.96); }
+    .tidy:disabled { opacity: 0.45; cursor: default; }
+    .diary-compose { padding: 8px 18px 10px; }
+    .diary-compose-btn {
+      width: 100%;
+      height: 44px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(142, 160, 200, 0.16);
+      color: var(--dusk);
+      cursor: pointer;
+      font-family: "Noto Serif SC", serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+    }
+    .diary-compose-btn:disabled { opacity: 0.45; cursor: default; }
+
     .phone-shell {
       padding: 8px;
       border-radius: 38px;
@@ -113,51 +147,6 @@
       font-family: "Noto Serif SC", serif;
       font-size: 13px;
     }
-
-    .ritual {
-      flex: none;
-      margin: 8px 16px 0;
-      padding: 5px;
-      border-radius: 22px;
-      background: rgba(0,0,0,0.22);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-    }
-    .ritual button {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--mute);
-      border-radius: 18px;
-      padding: 12px 10px 11px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      cursor: pointer;
-      font: inherit;
-      transition: transform 220ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
-    }
-    .ritual button strong {
-      font-family: "Noto Serif SC", serif;
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-    }
-    .ritual button small {
-      font-size: 10px;
-      letter-spacing: 0.08em;
-    }
-    .ritual button.active {
-      background: var(--panel);
-      color: var(--paper);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-    }
-    .ritual button.morning.active { color: var(--dawn); }
-    .ritual button.evening.active { color: var(--dusk); }
-    .ritual button:active { transform: scale(0.98); }
-    .ritual button:disabled { opacity: 0.45; cursor: default; }
 
     .screens {
       flex: 1;
@@ -483,32 +472,23 @@
 
         <div class="screens">
           <section class="screen on" id="screen-chat" data-screen="chat">
-            <div class="ritual">
-              <button class="morning" id="btnMorning" type="button">
-                <strong>朝</strong>
-                <small>开始今天</small>
-              </button>
-              <button class="evening" id="btnEvening" type="button">
-                <strong>暮</strong>
-                <small>回顾今天</small>
-              </button>
-            </div>
             <div class="thread" id="thread">
               <div class="empty" id="chatEmpty">
-                <div class="glyph">朝 / 暮</div>
-                <p>点上面「朝」开始今天。<br />白天想到什么就丢进来。<br />晚上点「暮」，对照 Todo 做回顾。</p>
+                <div class="glyph">朝暮</div>
+                <p>想到什么直接说。<br />聊完点发送左边的「自动整理」，刷新今天的待办。</p>
               </div>
             </div>
             <div class="composer">
               <div class="composer-shell">
                 <input id="input" type="text" placeholder="想到什么，直接说…" autocomplete="off" />
+                <button class="tidy" id="btnTidy" type="button" aria-label="自动整理">自动整理</button>
                 <button class="send" id="send" type="button" aria-label="发送">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
                 </button>
               </div>
-              <div class="hint">示意里发送会接一段预写的回复</div>
+              <div class="hint" id="composerHint">发送左边「自动整理」：根据刚才的对话，刷新今天的待办</div>
             </div>
           </section>
 
@@ -518,9 +498,11 @@
                 <h2>今日</h2>
                 <div class="count" id="todoCount">0 / 0</div>
               </div>
-              <div class="section-label">还没做</div>
-              <div id="todoOpen"></div>
-              <div class="section-label">已经勾掉</div>
+              <div class="section-label">今天</div>
+              <div id="todoToday"></div>
+              <div class="section-label">以后</div>
+              <div id="todoLater"></div>
+              <div class="section-label">已完成</div>
               <div id="todoDone"></div>
             </div>
           </section>
@@ -532,6 +514,9 @@
                 <div class="count">只记今天</div>
               </div>
               <div id="diaryBody"></div>
+            </div>
+            <div class="diary-compose">
+              <button class="diary-compose-btn" id="btnDiary" type="button">整理成日记</button>
             </div>
           </section>
         </div>
@@ -569,13 +554,13 @@
     const thread = $("thread");
     const chatEmpty = $("chatEmpty");
     const input = $("input");
+    const btnTidy = $("btnTidy");
     const todos = [
-      { id: "alipay", title: "整理支付宝调试问题并发群里询问", meta: "昨天留下的", done: false, confirmed: true },
-      { id: "weekly", title: "把周报发给组里", meta: "昨天留下的", done: false, confirmed: true },
+      { id: "alipay", title: "整理支付宝调试问题并发群里询问", meta: "记着", when: "later", done: false, confirmed: true },
+      { id: "weekly", title: "把周报发给组里", meta: "记着", when: "later", done: false, confirmed: true },
     ];
-    let morningDone = false;
-    let eveningDone = false;
     let diaryReady = false;
+    let planConfirmed = false;
     let awaiting = false;
 
     function go(name) {
@@ -587,8 +572,13 @@
       btn.addEventListener("click", () => go(btn.dataset.nav));
     });
 
+    function syncTidy() {
+      btnTidy.setAttribute("aria-label", "自动整理");
+      $("composerHint").textContent = "发送左边「自动整理」：根据刚才的对话，刷新今天的待办";
+    }
+
     function hideEmpty() {
-      if (chatEmpty) chatEmpty.remove();
+      if (chatEmpty && chatEmpty.parentNode) chatEmpty.remove();
     }
 
     function addMsg(role, text) {
@@ -622,12 +612,16 @@
     }
 
     function renderTodos() {
-      const open = todos.filter((t) => t.confirmed && !t.done);
+      const today = todos.filter((t) => t.confirmed && !t.done && t.when === "today");
+      const later = todos.filter((t) => t.confirmed && !t.done && t.when !== "today");
       const done = todos.filter((t) => t.confirmed && t.done);
-      $("todoOpen").innerHTML = open.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">没有未做的事了。</p>`;
+      $("todoToday").innerHTML = today.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">还没定今天做哪几件。</p>`;
+      $("todoLater").innerHTML = later.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">没有记着的事。</p>`;
       $("todoDone").innerHTML = done.map(itemHtml).join("") || `<p class="empty" style="margin:8px 0">还没勾过。</p>`;
-      $("todoCount").textContent = `${done.length} / ${open.length + done.length}`;
-      $("todoOpen").querySelectorAll(".item").forEach(bindItem);
+      const todayDone = done.filter((t) => t.when === "today");
+      $("todoCount").textContent = `${todayDone.length} / ${today.length + todayDone.length}`;
+      $("todoToday").querySelectorAll(".item").forEach(bindItem);
+      $("todoLater").querySelectorAll(".item").forEach(bindItem);
       $("todoDone").querySelectorAll(".item").forEach(bindItem);
       renderDiary();
     }
@@ -666,10 +660,10 @@
         wrap.querySelectorAll("input:checked").forEach((box) => {
           const it = items[Number(box.dataset.i)];
           if (!todos.some((t) => t.title === it.title)) {
-            todos.push({ id: it.id, title: it.title, meta: "刚从对话确认", done: false, confirmed: true });
+            todos.push({ id: it.id, title: it.title, meta: "先记着", when: "later", done: false, confirmed: true });
           }
         });
-        wrap.querySelector(".propose-core").innerHTML = `<header>已加入今日 Todo</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">去「待办」页就能勾。没有你点确认的，我不会自己加。</p>`;
+        wrap.querySelector(".propose-core").innerHTML = `<header>已记到「以后」</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">不定今天的计划。想改今天做哪几件，再点「制定今日计划」。</p>`;
         renderTodos();
       };
       wrap.querySelector(".btn-no").onclick = () => {
@@ -677,62 +671,149 @@
       };
     }
 
+    function addTodayPlan(items) {
+      hideEmpty();
+      const wrap = document.createElement("div");
+      wrap.className = "msg agent propose";
+      wrap.innerHTML = `<div class="who">待确认</div>
+        <div class="propose-shell"><div class="propose-core">
+          <header>今天做这几件？</header>
+          ${items.map((it, i) => `<label class="todo-pick"><input type="checkbox" checked data-i="${i}" /> ${it.title}</label>`).join("")}
+          <div class="propose-actions">
+            <button class="btn-yes" type="button">确认今日计划</button>
+            <button class="btn-no" type="button">先不定</button>
+          </div>
+        </div></div>`;
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      wrap.querySelector(".btn-yes").onclick = () => {
+        const picked = [];
+        wrap.querySelectorAll("input:checked").forEach((box) => picked.push(items[Number(box.dataset.i)]));
+        todos.forEach((t) => {
+          if (!t.done && t.when === "today") t.when = "later";
+        });
+        picked.forEach((it) => {
+          const existing = todos.find((t) => t.title === it.title);
+          if (existing) {
+            existing.when = "today";
+            existing.meta = "今天";
+            existing.confirmed = true;
+          } else {
+            todos.push({ id: it.id, title: it.title, meta: "今天", when: "today", done: false, confirmed: true });
+          }
+        });
+        wrap.querySelector(".propose-core").innerHTML = `<header>今日计划已定</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">去「待办」看今天那几件。没选上的还在「以后」。再点「自动整理」会再刷新今天。日记去日记页点「整理成日记」。</p>`;
+        planConfirmed = true;
+        syncTidy();
+        renderTodos();
+      };
+      wrap.querySelector(".btn-no").onclick = () => {
+        wrap.querySelector(".propose-core").innerHTML = `<header>先不定</header><p style="font-size:13px;color:var(--paper-dim)">今天的清单不动。没点确认，不会刷新。</p>`;
+      };
+    }
+
+    function addDiaryConfirm() {
+      hideEmpty();
+      const wrap = document.createElement("div");
+      wrap.className = "msg agent propose";
+      wrap.innerHTML = `<div class="who">待确认</div>
+        <div class="propose-shell"><div class="propose-core">
+          <header>把上面写成今天的日记？</header>
+          <p style="font-size:13px;color:var(--paper-dim);line-height:1.65;padding:4px 4px 8px">对照的是今天的计划，以后那堆不算没做完。</p>
+          <div class="propose-actions">
+            <button class="btn-yes" type="button">写入日记</button>
+            <button class="btn-no" type="button">先不写</button>
+          </div>
+        </div></div>`;
+      thread.appendChild(wrap);
+      thread.scrollTop = thread.scrollHeight;
+      wrap.querySelector(".btn-yes").onclick = () => {
+        diaryReady = true;
+        renderDiary();
+        wrap.querySelector(".propose-core").innerHTML = `<header>已写入日记</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">去「日记」页就能看到。同一天再点，会更新今天这一篇。</p>`;
+      };
+      wrap.querySelector(".btn-no").onclick = () => {
+        wrap.querySelector(".propose-core").innerHTML = `<header>先不写</header><p style="font-size:13px;color:var(--paper-dim)">日记不动。想写的时候再点「结束今天」。</p>`;
+      };
+    }
+
     function renderDiary() {
       const body = $("diaryBody");
       if (!diaryReady) {
-        body.innerHTML = `<div class="empty"><div class="glyph">暮</div><p>晚上点「暮」聊完之后，今天的记录会出现在这里。<br />周 / 月 / 年第一版不做。</p></div>`;
+        body.innerHTML = `<div class="empty"><div class="glyph">暮</div><p>点下面「整理成日记」。今天不整的话，明天打开会补上昨天。</p></div>`;
         return;
       }
-      const open = todos.filter((t) => t.confirmed && !t.done);
-      const done = todos.filter((t) => t.confirmed && t.done);
+      const todayOpen = todos.filter((t) => t.confirmed && !t.done && t.when === "today");
+      const todayDone = todos.filter((t) => t.confirmed && t.done && t.when === "today");
       body.innerHTML = `<div class="log-card"><div class="log-core">
         <h3>九月五日</h3>
         <div class="log-block"><div class="lab">早计划</div>
-          <p>先拿下支付宝调试，水电费顺手转，周报放到晚上。</p></div>
+          <p>先拿下支付宝调试，水电费顺手转。周报先记着，不挤进今天。</p></div>
         <div class="log-block"><div class="lab">做成了</div>
-          <ul>${done.map((t) => `<li>${t.title}</li>`).join("") || "<li>还没有勾掉的。</li>"}</ul></div>
+          <ul>${todayDone.map((t) => `<li>${t.title}</li>`).join("") || "<li>还没有勾掉的。</li>"}</ul></div>
         <div class="log-block"><div class="lab">没做完</div>
-          <ul>${open.map((t) => `<li>${t.title}</li>`).join("") || "<li>全部勾完了。</li>"}</ul></div>
+          <ul>${todayOpen.map((t) => `<li>${t.title}</li>`).join("") || "<li>全部勾完了。</li>"}</ul></div>
         <div class="log-block"><div class="lab">状态 · 你不用另写</div>
-          <div class="mood">下午被调试拖住，有点烦，也确实在啃硬的。水电费是忘了，不是做不到。明天朝那一轮第一句会再提起。</div>
+          <div class="mood">下午被调试拖住，有点烦，也确实在啃硬的。水电费是忘了，不是做不到。周报还在「以后」，不算今天没做完。</div>
         </div>
       </div></div>`;
     }
 
-    $("btnMorning").addEventListener("click", async () => {
-      if (awaiting || morningDone) return;
-      awaiting = true;
-      $("btnMorning").classList.add("active");
+    async function startPlan() {
       go("chat");
-      const leftover = todos.filter((t) => t.confirmed && !t.done);
-      addMsg("me", "开始今天。");
-      await say(`早。昨天还剩 ${leftover.length} 件没勾完：${leftover.map((t) => t.title.replace(/整理|把/g, "")).join("、")}。今天最想先拿下哪件？`);
+      const later = todos.filter((t) => t.confirmed && !t.done && t.when !== "today");
+      const today = todos.filter((t) => t.confirmed && !t.done && t.when === "today");
+      addMsg("me", "自动整理。");
+      const laterBit = later.length ? `以后记着 ${later.length} 件：${later.map((t) => t.title).join("、")}。` : "以后是空的。";
+      const todayBit = today.length ? `今天已经有 ${today.length} 件。` : "今天还没定。";
+      await say(`好，来定今天。${todayBit}${laterBit}今天最想先拿下哪件？一天塞不了太多。`);
       await wait(380);
-      addMsg("me", "支付宝那个必须今天弄完。另外突然想起还要给房东转水电费。");
-      await say("那今天我建议这个顺序：1. 支付宝调试，有人等；2. 水电费，五分钟能做完；3. 周报可以放到晚上。你觉得没问题，我们就按这个走。");
-      addPropose([{ id: "water", title: "给房东转水电费" }]);
-      morningDone = true;
-      awaiting = false;
-    });
+      addMsg("me", "支付宝那个必须今天弄完。另外突然想起还要给房东转水电费。周报先放着。");
+      await say("那今天两件：支付宝调试，水电费。周报还在以后。一天两件比较稳。");
+      addTodayPlan([
+        { id: "alipay", title: "整理支付宝调试问题并发群里询问" },
+        { id: "water", title: "给房东转水电费" },
+      ]);
+    }
 
-    $("btnEvening").addEventListener("click", async () => {
-      if (awaiting) return;
-      awaiting = true;
-      $("btnEvening").classList.add("active");
+    async function endDay() {
       go("chat");
-      const open = todos.filter((t) => t.confirmed && !t.done);
-      const done = todos.filter((t) => t.confirmed && t.done);
-      addMsg("me", "今天结束了。");
-      await say(`晚上了。今天 ${done.length + open.length} 件事，你勾了 ${done.length} 件。${open.length ? "还没动的是：" + open.map((t) => t.title).join("、") + "。" : "都勾完了。"}怎么了？`);
+      const todayOpen = todos.filter((t) => t.confirmed && !t.done && t.when === "today");
+      const todayDone = todos.filter((t) => t.confirmed && t.done && t.when === "today");
+      addMsg("me", "结束今天。");
+      await say(`对照今天：计划 ${todayDone.length + todayOpen.length} 件，勾了 ${todayDone.length} 件。${todayOpen.length ? "没做完：" + todayOpen.map((t) => t.title).join("、") + "。" : "都勾完了。"}以后那堆不算没做完。怎么了？`);
       await wait(400);
       addMsg("me", "调试卡了一下午。水电费忘了。有点烦。");
-      await say("下午啃硬的很正常。水电费还在列表里，明天朝那一轮我第一句会再提。周报如果只是同步进度，写三行就够，不必完美。要不要我把今天写成一篇记录？");
-      await wait(280);
-      diaryReady = true;
-      eveningDone = true;
-      renderDiary();
-      await say("今日记录已经放进「日记」了。里面有计划、做成了什么、没做完什么，还有一段今天的状态。你不用另写。");
-      awaiting = false;
+      await say("下午啃硬的很正常。水电费还在今天的清单里，不点「自动整理」就不会换掉。周报在以后，不算今天没做完。");
+      addDiaryConfirm();
+    }
+
+    $("btnDiary").addEventListener("click", async () => {
+      if (awaiting) return;
+      awaiting = true;
+      $("btnDiary").disabled = true;
+      $("btnDiary").textContent = "正在整理…";
+      try {
+        await wait(400);
+        diaryReady = true;
+        renderDiary();
+      } finally {
+        awaiting = false;
+        $("btnDiary").disabled = false;
+        $("btnDiary").textContent = "整理成日记";
+      }
+    });
+
+    btnTidy.addEventListener("click", async () => {
+      if (awaiting) return;
+      awaiting = true;
+      btnTidy.disabled = true;
+      try {
+        await startPlan();
+      } finally {
+        awaiting = false;
+        btnTidy.disabled = false;
+      }
     });
 
     async function sendFree() {
@@ -755,6 +836,7 @@
       if (e.key === "Enter") sendFree();
     });
 
+    syncTidy();
     renderTodos();
   </script>
 </body>

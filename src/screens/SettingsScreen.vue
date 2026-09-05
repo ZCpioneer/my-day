@@ -19,7 +19,7 @@
       <label class="field">
         <span>朝暮分界（小时）</span>
         <input v-model.number="draft.daySplitHour" type="number" min="0" max="23" step="1" />
-        <p class="hint">这个点之前算朝（开始），到了这个点及以后算暮（结束）。默认 12，即上午开始、下午结束。</p>
+        <p class="hint">给对话一点时间感（现在像早上还是晚上）。自动整理只刷新今日待办，日记在日记页。默认 12。</p>
       </label>
       <button class="btn-save" type="button" @click="onSave">保存</button>
       <DebugPanel />

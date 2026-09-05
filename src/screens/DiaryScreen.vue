@@ -7,7 +7,7 @@
       </div>
       <div v-if="!daily" class="empty">
         <div class="glyph">暮</div>
-        <p>晚上点「暮」聊完之后，今天的记录会出现在这里。</p>
+        <p>点下面「整理成日记」。今天不整的话，明天打开会补上昨天。</p>
       </div>
       <div v-else class="log-card">
         <div class="log-core">
@@ -37,6 +37,17 @@
         </div>
       </div>
     </div>
+    <div class="diary-compose">
+      <button
+        data-diary-compose
+        class="diary-compose-btn"
+        type="button"
+        :disabled="composing"
+        @click="emit('compose')"
+      >
+        {{ composing ? "正在整理…" : "整理成日记" }}
+      </button>
+    </div>
   </section>
 </template>
 
@@ -44,7 +55,13 @@
 import { computed } from "vue";
 import type { DailyLog } from "@/types";
 
-const props = defineProps<{ daily: DailyLog | null; date: string }>();
+const props = defineProps<{
+  daily: DailyLog | null;
+  date: string;
+  composing?: boolean;
+}>();
+
+const emit = defineEmits<{ compose: [] }>();
 
 const dateLabel = computed(() => {
   const parts = props.date.split("-");

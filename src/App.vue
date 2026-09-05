@@ -15,27 +15,27 @@
         </button>
       </div>
     </header>
+    <p v-if="catchUpNote" class="catchup-note">{{ catchUpNote }}</p>
     <div class="screens">
-      <RitualBar
-        v-if="tab === 'chat'"
-        :disabled="awaiting"
-        :morning-active="activeSession === 'morning'"
-        :evening-active="activeSession === 'evening'"
-        @morning="onMorning"
-        @evening="onEvening"
-      />
       <ChatScreen
         v-if="tab === 'chat'"
-        :messages="sessionThread"
+        :messages="chat.messages"
         :awaiting="awaiting"
         :pending-propose="pendingPropose"
-        :period="activeSession"
+        :propose-kind="proposeKind"
         @send="onSend"
+        @tidy="onTidy"
         @confirm="onConfirmPropose"
         @skip="onSkipPropose"
       />
       <TodoScreen v-else-if="tab === 'todo'" :todos="todos" @toggle="onToggle" />
-      <DiaryScreen v-else-if="tab === 'diary'" :daily="daily" :date="date" />
+      <DiaryScreen
+        v-else-if="tab === 'diary'"
+        :daily="daily"
+        :date="date"
+        :composing="composingDiary"
+        @compose="onComposeDiary"
+      />
       <SettingsScreen v-else :settings="settings" @save="onSaveSettings" />
     </div>
     <div class="dock-wrap">
@@ -67,18 +67,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { composeDailyLog } from "@/agent/compose-log";
 import { runAgent, type AgentDeps } from "@/agent/loop";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
-import RitualBar from "@/components/RitualBar.vue";
 import ChatScreen from "@/screens/ChatScreen.vue";
 import TodoScreen from "@/screens/TodoScreen.vue";
 import DiaryScreen from "@/screens/DiaryScreen.vue";
 import SettingsScreen from "@/screens/SettingsScreen.vue";
+import { catchUpDiary } from "@/diary";
 import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
-import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow, sessionMessages } from "@/ritual";
+import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
 import { chatRepo, logRepo, todoRepo } from "@/storage/db";
 import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
 import {
@@ -106,12 +107,16 @@ const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
+const proposeKind = ref<"later" | "today">("later");
 const awaiting = ref(false);
+const composingDiary = ref(false);
+const catchUpNote = ref("");
 const activeSession = ref<"morning" | "evening">(ritualForNow());
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
+let catchUpRunning = false;
+let dayTick: number | undefined;
 
 const dateLabel = computed(() => formatDateLabel(date.value));
-const sessionThread = computed(() => sessionMessages(chat.value.messages, activeSession.value));
 
 function formatDateLabel(iso: string): string {
   const parts = iso.split("-");
@@ -129,25 +134,7 @@ const ready = (async () => {
   todos.value = await todoRepo.list();
   await loadDay(date.value);
 })();
-
-function onVisibilityChange() {
-  if (document.visibilityState !== "visible") return;
-  const next = localDate();
-  const session = ritualForNow(new Date(), settings.value.daySplitHour);
-  if (next === date.value) {
-    if (!awaiting.value) activeSession.value = session;
-    return;
-  }
-  date.value = next;
-  activeSession.value = session;
-  void (async () => {
-    await ready;
-    await loadDay(next);
-  })();
-}
-
-onMounted(() => document.addEventListener("visibilitychange", onVisibilityChange));
-onUnmounted(() => document.removeEventListener("visibilitychange", onVisibilityChange));
+void ready.then(() => runCatchUp());
 
 async function complete(req: ChatCompletionRequest) {
   const key = effectiveApiKey(settings.value);
@@ -168,28 +155,32 @@ async function addTodos(items: ProposedTodo[]) {
       status: "open",
       sourceDate,
       createdAt,
+      when: "later",
     });
   }
   todos.value = await todoRepo.list();
 }
 
-async function writeDailyLog(log: DailyLog) {
-  await logRepo.put(log);
-  if (log.date === date.value) daily.value = log;
-}
-
-function onPropose(items: ProposedTodo[]): Promise<ProposedTodo[]> {
+function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
+  proposeKind.value = kind;
   pendingPropose.value = items;
   return new Promise((resolve) => {
     proposeResolve = resolve;
   });
 }
 
+async function setTodayPlan(items: ProposedTodo[]) {
+  await todoRepo.applyTodayPlan(items.map((i) => i.title));
+  await chatRepo.setPlanConfirmed(date.value, new Date().toISOString());
+  chat.value = await chatRepo.get(date.value);
+  todos.value = await todoRepo.list();
+}
+
 const agentDeps: AgentDeps = {
   complete,
   listTodos: () => todoRepo.list(),
   addTodos,
-  writeDailyLog,
+  setTodayPlan,
   now: () => new Date(),
   onPropose,
 };
@@ -219,9 +210,7 @@ async function runTurn(mode: ChatMode, userText: string) {
   if (awaiting.value) return;
   awaiting.value = true;
   if (mode === "morning" || mode === "evening") activeSession.value = mode;
-  const session = mode === "evening" ? "evening" : "morning";
-  activeSession.value = session;
-  const history = sessionMessages(chat.value.messages, session);
+  const history = chat.value.messages;
   try {
     await appendMessage({
       id: newId(),
@@ -236,6 +225,7 @@ async function runTurn(mode: ChatMode, userText: string) {
       userText,
       history,
       model: settings.value.model,
+      planConfirmed: !!chat.value.planConfirmedAt,
     });
     await appendMessage({
       id: newId(),
@@ -262,25 +252,104 @@ async function runTurn(mode: ChatMode, userText: string) {
   }
 }
 
-async function startRitual(mode: "morning" | "evening") {
+function onTidy() {
+  void runTurn("morning", "自动整理。");
+}
+
+async function runCatchUp() {
   await ready;
-  if (awaiting.value) return;
-  await chatRepo.clear(date.value);
-  chat.value = { date: date.value, messages: [] };
-  const opener = mode === "morning" ? "开始今天。" : "今天结束了。";
-  await runTurn(mode, opener);
+  if (catchUpRunning) return;
+  catchUpRunning = true;
+  try {
+    const wrote = await catchUpDiary({
+      today: localDate(),
+      hasKey: !!effectiveApiKey(settings.value),
+      getChat: (d) => chatRepo.get(d),
+      listTodos: () => todoRepo.list(),
+      getLog: (d) => logRepo.get(d),
+      putLog: (log) => logRepo.put(log),
+      compose: async (d) =>
+        composeDailyLog({
+          date: d,
+          now: new Date(),
+          chat: await chatRepo.get(d),
+          todos: await todoRepo.list(),
+          complete,
+          model: settings.value.model,
+        }),
+    });
+    if (wrote) catchUpNote.value = "已补上上次的日记";
+  } finally {
+    catchUpRunning = false;
+  }
 }
 
-function onMorning() {
-  void startRitual("morning");
+async function onComposeDiary() {
+  await ready;
+  if (composingDiary.value) return;
+  composingDiary.value = true;
+  try {
+    const d = date.value;
+    const log = await composeDailyLog({
+      date: d,
+      now: new Date(),
+      chat: await chatRepo.get(d),
+      todos: await todoRepo.list(),
+      complete,
+      model: settings.value.model,
+    });
+    await logRepo.put(log);
+    if (log.date === date.value) daily.value = log;
+  } catch (e) {
+    const userMessage = e instanceof ApiError ? e.userMessage : "日记这轮没写成";
+    debugLog.push({
+      event: "http_fail",
+      detail: e instanceof Error ? e.message : String(e),
+    });
+    catchUpNote.value = userMessage;
+  } finally {
+    composingDiary.value = false;
+  }
 }
 
-function onEvening() {
-  void startRitual("evening");
+async function rollToTodayIfNeeded() {
+  const next = localDate();
+  const session = ritualForNow(new Date(), settings.value.daySplitHour);
+  if (next === date.value) {
+    if (!awaiting.value) activeSession.value = session;
+    return false;
+  }
+  date.value = next;
+  activeSession.value = session;
+  await ready;
+  await loadDay(next);
+  return true;
 }
+
+function onVisibilityChange() {
+  if (document.visibilityState !== "visible") return;
+  void (async () => {
+    await rollToTodayIfNeeded();
+    await runCatchUp();
+  })();
+}
+
+onMounted(() => {
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  dayTick = window.setInterval(() => {
+    void (async () => {
+      const rolled = await rollToTodayIfNeeded();
+      if (rolled) await runCatchUp();
+    })();
+  }, 60_000);
+});
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", onVisibilityChange);
+  if (dayTick !== undefined) window.clearInterval(dayTick);
+});
 
 function onSend(text: string) {
-  void runTurn(activeSession.value, text);
+  void runTurn("chat", text);
 }
 
 async function onToggle(id: string) {
