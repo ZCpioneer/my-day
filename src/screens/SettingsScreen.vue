@@ -6,7 +6,8 @@
       </div>
       <label class="field">
         <span>DeepSeek API Key</span>
-        <input v-model="draft.apiKey" type="password" autocomplete="off" />
+        <input v-model="draft.apiKey" type="password" autocomplete="off" placeholder="留空则用内置调试 Key" />
+        <p class="hint">可以自己贴 Key。不填就用内置的调试 Key。</p>
       </label>
       <label class="field">
         <span>模型</span>
@@ -15,17 +16,15 @@
           <option value="deepseek-v4-pro">deepseek-v4-pro</option>
         </select>
       </label>
-      <label class="field-row">
-        <span>调试面板</span>
-        <input v-model="draft.debugOverlay" type="checkbox" />
-      </label>
       <button class="btn-save" type="button" @click="onSave">保存</button>
+      <DebugPanel />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import DebugPanel from "@/components/DebugPanel.vue";
 import type { Settings } from "@/types";
 
 const props = defineProps<{ settings: Settings }>();

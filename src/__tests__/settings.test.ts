@@ -17,7 +17,7 @@ describe("settings", () => {
     mem.clear();
     const s = await loadSettings(prefs);
     expect(s.model).toBe(DEFAULT_MODEL);
-    expect(s.debugOverlay).toBe(true);
+    expect(s.debugOverlay).toBe(false);
     expect(s.apiKey).toBe("");
   });
 

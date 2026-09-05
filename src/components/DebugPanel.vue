@@ -1,7 +1,7 @@
 <template>
   <aside class="debug-panel">
     <header class="debug-head">
-      <button type="button" @click="expanded = !expanded">Debug</button>
+      <button type="button" @click="expanded = !expanded">{{ expanded ? "收起调试" : "调试日志" }}</button>
       <button type="button" @click="debugLog.clear()">清空</button>
       <button type="button" @click="copy">复制</button>
     </header>
@@ -22,7 +22,7 @@
 import { ref } from "vue";
 import { debugLog } from "@/debug/log";
 
-const expanded = ref(true);
+const expanded = ref(false);
 
 async function copy() {
   const text = debugLog.toText();

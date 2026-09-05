@@ -12,4 +12,14 @@ describe("ritual visibility", () => {
     await w.get("[data-nav=chat]").trigger("click");
     expect(w.text()).toContain("开始今天");
   });
+
+  it("keeps debug off the chat screen and opens settings from the gear", async () => {
+    const w = mount(App);
+    expect(w.find(".debug-panel").exists()).toBe(false);
+    expect(w.get("[data-nav=settings]").text()).toContain("设置");
+    await w.get("[data-nav=settings]").trigger("click");
+    expect(w.text()).toContain("DeepSeek API Key");
+    expect(w.text()).toContain("调试日志");
+    expect(w.find(".debug-panel").exists()).toBe(true);
+  });
 });

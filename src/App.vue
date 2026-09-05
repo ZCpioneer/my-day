@@ -4,13 +4,14 @@
       <div class="brand">朝<span>暮</span></div>
       <div class="when">
         <em>{{ dateLabel }}</em>
-        <button type="button" class="gear" data-nav="settings" aria-label="设置" @click="tab = 'settings'">
+        <button type="button" class="gear" data-nav="settings" @click="tab = 'settings'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2" />
             <path
               d="M12 3.2v2M12 18.8v2M3.2 12h2M18.8 12h2M6.1 6.1l1.4 1.4M16.5 16.5l1.4 1.4M17.9 6.1l-1.4 1.4M7.5 16.5l-1.4 1.4"
             />
           </svg>
+          设置
         </button>
       </div>
     </header>
@@ -60,7 +61,6 @@
         </button>
       </nav>
     </div>
-    <DebugPanel v-if="settings.debugOverlay" />
   </div>
 </template>
 
@@ -70,7 +70,6 @@ import { runAgent, type AgentDeps } from "@/agent/loop";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
 import RitualBar from "@/components/RitualBar.vue";
-import DebugPanel from "@/components/DebugPanel.vue";
 import ChatScreen from "@/screens/ChatScreen.vue";
 import TodoScreen from "@/screens/TodoScreen.vue";
 import DiaryScreen from "@/screens/DiaryScreen.vue";
@@ -97,7 +96,7 @@ const tab = ref<Tab>("chat");
 const settings = ref<Settings>({
   apiKey: "",
   model: DEFAULT_MODEL,
-  debugOverlay: true,
+  debugOverlay: false,
 });
 const todos = ref<Todo[]>([]);
 const date = ref(localDate());

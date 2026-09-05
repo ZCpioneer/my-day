@@ -36,12 +36,12 @@ function defaultPrefs(): Prefs {
 
 export async function loadSettings(prefs: Prefs = defaultPrefs()): Promise<Settings> {
   const raw = await prefs.get(KEY);
-  if (!raw) return { apiKey: "", model: DEFAULT_MODEL, debugOverlay: true };
+  if (!raw) return { apiKey: "", model: DEFAULT_MODEL, debugOverlay: false };
   const parsed = JSON.parse(raw) as Partial<Settings>;
   return {
     apiKey: parsed.apiKey ?? "",
     model: parsed.model || DEFAULT_MODEL,
-    debugOverlay: parsed.debugOverlay ?? true,
+    debugOverlay: parsed.debugOverlay ?? false,
   };
 }
 
