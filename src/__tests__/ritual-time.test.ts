@@ -53,24 +53,36 @@ describe("sessionMessages", () => {
 });
 
 describe("buildContextMessages", () => {
-  it("does not send morning chat into an evening turn", () => {
-    const open: Todo[] = [
+  it("keeps the whole day's chat and reports today / later / done", () => {
+    const today: Todo[] = [
       {
         id: "t1",
+        title: "支付宝调试",
+        status: "open",
+        sourceDate: "2026-09-05",
+        createdAt: "2026-09-05T01:00:00.000Z",
+        when: "today",
+      },
+    ];
+    const later: Todo[] = [
+      {
+        id: "t3",
         title: "周报",
         status: "open",
         sourceDate: "2026-09-05",
         createdAt: "2026-09-05T01:00:00.000Z",
+        when: "later",
       },
     ];
     const done: Todo[] = [
       {
         id: "t2",
-        title: "支付宝调试",
+        title: "水电费",
         status: "done",
         sourceDate: "2026-09-05",
         createdAt: "2026-09-05T01:00:00.000Z",
         completedAt: "2026-09-05T10:00:00.000Z",
+        when: "today",
       },
     ];
     const msgs: ChatMessage[] = [
@@ -93,13 +105,18 @@ describe("buildContextMessages", () => {
       date: "2026-09-05",
       timeLabel: "下午 15:00",
       mode: "evening",
-      openTodos: open,
+      todayTodos: today,
+      laterTodos: later,
       doneToday: done,
       messages: msgs,
+      planConfirmed: true,
     });
     const blob = JSON.stringify(out);
-    expect(blob).not.toContain("支付宝必须今天弄完");
-    expect(blob).toContain("今日已完成 1 件：支付宝调试");
+    expect(blob).toContain("支付宝必须今天弄完");
+    expect(blob).toContain("今天 1 件：支付宝调试");
+    expect(blob).toContain("以后 1 件：周报");
+    expect(blob).toContain("今日已完成 1 件：水电费");
     expect(blob).toContain("待办列表是唯一真相");
+    expect(blob).toContain("整理今日待办");
   });
 });

@@ -1,8 +1,9 @@
 import type { ApiMessage, ChatCompletionRequest, ChatCompletionResponse, ToolCall } from "@/api/deepseek";
 import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
-import { filterProposedTodos } from "@/todos-filter";
-import type { ChatMessage, ChatMode, DailyLog, ProposedTodo, Todo } from "@/types";
+import { filterProposedTodos, filterTodayPlanItems } from "@/todos-filter";
+import { partitionTodos } from "@/todos";
+import type { ChatMessage, ChatMode, ProposedTodo, Todo } from "@/types";
 import { buildContextMessages } from "./context";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
@@ -13,9 +14,9 @@ export interface AgentDeps {
   complete: (req: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
   listTodos: () => Promise<Todo[]>;
   addTodos: (items: ProposedTodo[]) => Promise<void>;
-  writeDailyLog: (log: DailyLog) => Promise<void>;
+  setTodayPlan: (items: ProposedTodo[]) => Promise<void>;
   now: () => Date;
-  onPropose: (items: ProposedTodo[]) => Promise<ProposedTodo[]>;
+  onPropose: (items: ProposedTodo[], kind: "later" | "today") => Promise<ProposedTodo[]>;
 }
 
 function formatTimeLabel(now: Date): string {
@@ -53,29 +54,14 @@ function asProposedItems(raw: unknown): ProposedTodo[] | undefined {
   return out;
 }
 
-function isDoneToday(t: Todo, date: string): boolean {
-  return t.status === "done" && !!t.completedAt && localDate(new Date(t.completedAt)) === date;
-}
-
-function snapshotTodoTitles(todos: Todo[], date: string): { done: string[]; undone: string[] } {
-  return {
-    undone: todos.filter((t) => t.status === "open").map((t) => t.title),
-    done: todos.filter((t) => isDoneToday(t, date)).map((t) => t.title),
-  };
+function formatBucket(label: string, todos: Todo[]): string {
+  if (todos.length === 0) return `${label} 0 件`;
+  return `${label} ${todos.length} 件：${todos.map((t) => t.title).join("；")}`;
 }
 
 function formatTodos(todos: Todo[], date: string): string {
-  const open = todos.filter((t) => t.status === "open");
-  const done = todos.filter((t) => isDoneToday(t, date));
-  const openPart =
-    open.length === 0
-      ? "未完成 0 件"
-      : `未完成 ${open.length} 件：${open
-          .map((t) => (t.sourceDate !== date ? `${t.title}（跨天）` : t.title))
-          .join("；")}`;
-  const donePart =
-    done.length === 0 ? "已完成 0 件" : `已完成 ${done.length} 件：${done.map((t) => t.title).join("；")}`;
-  return `${openPart}。${donePart}。`;
+  const { today, later, doneToday } = partitionTodos(todos, date);
+  return `${formatBucket("今天", today)}。${formatBucket("以后", later)}。${formatBucket("今日已完成", doneToday)}。`;
 }
 
 async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
@@ -99,15 +85,36 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
       tool: "propose_todos",
       detail: valid.map((v) => v.title).join("、"),
     });
-    const accepted = await deps.onPropose(valid);
+    const accepted = await deps.onPropose(valid, "later");
     if (accepted.length === 0) {
       debugLog.push({ event: "todo_rejected", tool: "propose_todos", detail: "用户这次不加" });
       return "用户这次不加";
     }
-    await deps.addTodos(accepted);
+    await deps.addTodos(accepted.map((a) => ({ ...a, when: "later" })));
     const titles = accepted.map((a) => a.title).join("、");
     debugLog.push({ event: "todo_confirmed", tool: "propose_todos", detail: titles });
-    return `用户已加入：${titles}`;
+    return `用户已记到以后：${titles}`;
+  }
+
+  if (name === "set_today_plan") {
+    const items = asProposedItems(parsed);
+    if (!items) return "参数无效";
+    const valid = filterTodayPlanItems(items);
+    if (valid.length === 0) return "没有可定的今日事项";
+    debugLog.push({
+      event: "propose_ui",
+      tool: "set_today_plan",
+      detail: valid.map((v) => v.title).join("、"),
+    });
+    const accepted = await deps.onPropose(valid, "today");
+    if (accepted.length === 0) {
+      debugLog.push({ event: "todo_rejected", tool: "set_today_plan", detail: "用户先不定" });
+      return "用户先不定今天的计划";
+    }
+    await deps.setTodayPlan(accepted);
+    const titles = accepted.map((a) => a.title).join("、");
+    debugLog.push({ event: "todo_confirmed", tool: "set_today_plan", detail: titles });
+    return `用户已确认今日计划：${titles}`;
   }
 
   if (name === "suggest_order") {
@@ -115,32 +122,6 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
     const order = (parsed as { order?: unknown }).order;
     if (!isStringArray(order)) return "参数无效";
     return `已记下建议顺序：${order.join("、")}`;
-  }
-
-  if (name === "write_daily_log") {
-    if (!parsed || typeof parsed !== "object") return "参数无效";
-    const o = parsed as { plan?: unknown; state?: unknown };
-    if (typeof o.plan !== "string" || typeof o.state !== "string") {
-      return "参数无效";
-    }
-    const now = deps.now();
-    const date = localDate(now);
-    const snap = snapshotTodoTitles(await deps.listTodos(), date);
-    const log: DailyLog = {
-      date,
-      plan: o.plan,
-      done: snap.done,
-      undone: snap.undone,
-      state: o.state,
-      updatedAt: now.toISOString(),
-    };
-    try {
-      await deps.writeDailyLog(log);
-    } catch (e) {
-      return e instanceof Error ? e.message : String(e);
-    }
-    debugLog.push({ event: "log_written", tool: "write_daily_log", detail: log.date });
-    return "已写入今日日记";
   }
 
   return "未知工具";
@@ -152,13 +133,13 @@ export async function runAgent(input: {
   userText: string;
   history: ChatMessage[];
   model: string;
+  planConfirmed?: boolean;
 }): Promise<{ assistantText: string; stopped: boolean }> {
   const { deps, mode, userText, history, model } = input;
   const now = deps.now();
   const date = localDate(now);
   const todos = await deps.listTodos();
-  const openTodos = todos.filter((t) => t.status === "open");
-  const doneToday = todos.filter((t) => isDoneToday(t, date));
+  const { today, later, doneToday } = partitionTodos(todos, date);
 
   const messages: ApiMessage[] = [
     { role: "system", content: systemPrompt() },
@@ -166,9 +147,11 @@ export async function runAgent(input: {
       date,
       timeLabel: formatTimeLabel(now),
       mode,
-      openTodos,
+      todayTodos: today,
+      laterTodos: later,
       doneToday,
       messages: history,
+      planConfirmed: input.planConfirmed ?? false,
     }),
     { role: "user", content: userText },
   ];
