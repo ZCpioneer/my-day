@@ -264,3 +264,54 @@ describe("TodoScreen 跨组拖拽", () => {
     expect(typeof args?.[2]).toBe("number");
   });
 });
+
+describe("TodoScreen 组排序", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const trioTodos: Todo[] = ["a1", "b1", "c1"].map((id, i) => ({
+    id,
+    title: id,
+    status: "open" as const,
+    sourceDate: "2026-09-06",
+    createdAt: `2026-09-06T0${i + 1}:00:00.000Z`,
+    when: "later" as const,
+    projectId: `p${i + 1}`,
+  }));
+  const trioProjects: Project[] = ["p1", "p2", "p3"].map((id, i) => ({
+    id,
+    title: `组${id}`,
+    status: "active" as const,
+    createdAt: `2026-09-06T0${i + 1}:00:00.000Z`,
+    updatedAt: `2026-09-06T0${i + 1}:00:00.000Z`,
+  }));
+
+  it("长按组把手拖到另一组下方：emit moveGroup", async () => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    // 组拖拽的 move/up 挂在 window 上，组件得挂进 document 事件才传播得到
+    const w = mount(TodoScreen, { props: { todos: trioTodos, projects: trioProjects }, attachTo: document.body });
+    await flushPromises();
+    mockRect(w.get("[data-group=p1]").element as HTMLElement, 0, 100);
+    mockRect(w.get("[data-group=p2]").element as HTMLElement, 100, 200);
+    mockRect(w.get("[data-group=p3]").element as HTMLElement, 200, 300);
+
+    const handle = w.get("[data-group=p1] [data-group-handle]");
+    await handle.trigger("pointerdown", { clientX: 10, clientY: 20, pointerId: 7 });
+    await vi.advanceTimersByTimeAsync(HOLD_MS);
+    // p2 中点（150）之下、p3 中点（250）之上 → 不含自身的序列里第 1 位
+    await handle.trigger("pointermove", { clientX: 10, clientY: 180, pointerId: 7 });
+    await handle.trigger("pointerup", { clientX: 10, clientY: 180, pointerId: 7 });
+    expect(w.emitted("moveGroup")?.[0]).toEqual(["p1", 1]);
+  });
+
+  it("已完成的组没有把手", async () => {
+    localStorage.clear();
+    const doneProjects = trioProjects.map((p) => (p.id === "p3" ? { ...p, status: "done" as const } : p));
+    const w = mount(TodoScreen, { props: { todos: trioTodos, projects: doneProjects } });
+    await flushPromises();
+    expect(w.find("[data-group=p3] [data-group-handle]").exists()).toBe(false);
+    expect(w.find("[data-group=p1] [data-group-handle]").exists()).toBe(true);
+  });
+});

@@ -47,9 +47,16 @@
         >
           <div
             class="group-head"
-            :class="{ done: section.project?.status === 'done' }"
+            :class="{ done: section.project?.status === 'done', 'drop-before': isGroupDropBefore(section) }"
             @click="onGroupClick(section)"
           >
+            <span
+              v-if="section.project && section.project.status !== 'done'"
+              class="group-handle"
+              data-group-handle
+              @pointerdown="onGroupHandleDown(section.project.id, $event)"
+              @click.stop
+            >⠿</span>
             <span class="group-name">{{ section.project?.title ?? "未分组" }}</span>
             <span v-if="section.project" class="group-progress">
               {{ section.doneCount }}/{{ section.totalCount }}
@@ -102,11 +109,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
-import { edgeScrollDelta, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
-import { partitionLater, type LaterSection } from "@/todo-groups";
+import { edgeScrollDelta, HOLD_MS, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
+import { partitionLater, sortProjects, type LaterSection } from "@/todo-groups";
 import { loadCollapsedGroups, saveCollapsedGroups } from "@/storage/settings";
 import { partitionTodos, todoWhen } from "@/todos";
 import type { Project, Todo } from "@/types";
@@ -116,6 +123,7 @@ const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];
   move: [id: string, when: PlanBucket, index: number, projectId?: string | null];
+  moveGroup: [id: string, index: number];
 }>();
 
 const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
@@ -158,6 +166,111 @@ async function onGroupClick(s: LaterSection) {
   collapsed.value = next;
   await saveCollapsedGroups([...next]);
 }
+
+const groupInsertBefore = ref<string | null>(null);
+let groupDragId: string | null = null;
+let groupTimer: ReturnType<typeof setTimeout> | null = null;
+let groupStartX = 0;
+let groupStartY = 0;
+let groupPointer: number | null = null;
+
+// 「进行中组之后第一个分区」的 key：落空时插入线画在它上方；没有就靠桶尾。
+const groupEndKey = computed(() => {
+  const secs = laterSections.value;
+  const hit = secs.find((s) => s.project === null || s.project.status === "done");
+  return hit ? sectionKey(hit) : null;
+});
+
+function measureGroupInsert(clientY: number, dragId: string): { index: number; beforeKey: string } {
+  const movable = [...(scrollEl.value?.querySelectorAll<HTMLElement>("[data-group]") ?? [])].filter(
+    (el) => el.dataset.group && el.dataset.group !== dragId && el.dataset.done !== "1",
+  );
+  const midpoints = movable.map((el) => {
+    const rect = el.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  });
+  const index = insertIndex(clientY, midpoints);
+  const beforeKey = movable[index]?.dataset.group ?? (groupEndKey.value ?? "__end__");
+  return { index, beforeKey };
+}
+
+function clearGroupDrag() {
+  if (groupTimer !== null) {
+    clearTimeout(groupTimer);
+    groupTimer = null;
+  }
+  groupPointer = null;
+  groupDragId = null;
+  groupInsertBefore.value = null;
+  window.removeEventListener("pointermove", onGroupPointerMove, true);
+  window.removeEventListener("pointerup", onGroupPointerUp, true);
+  window.removeEventListener("pointercancel", onGroupPointerUp, true);
+}
+
+function onGroupHandleDown(id: string, e: PointerEvent) {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  groupStartX = e.clientX;
+  groupStartY = e.clientY;
+  groupPointer = e.pointerId;
+  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  groupTimer = setTimeout(() => {
+    groupTimer = null;
+    if (groupPointer === null) return;
+    groupDragId = id;
+    openId.value = null;
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      /* ignore */
+    }
+  }, HOLD_MS);
+  window.addEventListener("pointermove", onGroupPointerMove, true);
+  window.addEventListener("pointerup", onGroupPointerUp, true);
+  window.addEventListener("pointercancel", onGroupPointerUp, true);
+}
+
+function onGroupPointerMove(e: PointerEvent) {
+  if (groupPointer === null || e.pointerId !== groupPointer) return;
+  if (!groupDragId) {
+    // 拖动超过阈值 = 放弃长按，让位滚动
+    if (Math.abs(e.clientX - groupStartX) >= 8 || Math.abs(e.clientY - groupStartY) >= 8) {
+      clearGroupDrag();
+    }
+    return;
+  }
+  e.preventDefault();
+  const { beforeKey } = measureGroupInsert(e.clientY, groupDragId);
+  groupInsertBefore.value = beforeKey;
+}
+
+function onGroupPointerUp(e: PointerEvent) {
+  if (groupPointer === null || e.pointerId !== groupPointer) return;
+  const dragId = groupDragId;
+  if (dragId) {
+    const { index, beforeKey } = measureGroupInsert(e.clientY, dragId);
+    // 原位置不动：落点正好是自己原来的位置
+    const lane = sortProjects(props.projects ?? []).filter((p) => p.status !== "done");
+    const origin = lane.findIndex((p) => p.id === dragId);
+    if (!(beforeKey === "__end__" ? index === lane.length - 1 && origin === lane.length - 1 : index === origin)) {
+      emit("moveGroup", dragId, index);
+    }
+  }
+  clearGroupDrag();
+}
+
+function isGroupDropBefore(s: LaterSection): boolean {
+  const before = groupInsertBefore.value;
+  if (before === null) return false;
+  if (before === "__end__") return groupEndKey.value === null && isLastActive(s);
+  return before === sectionKey(s);
+}
+
+function isLastActive(s: LaterSection): boolean {
+  const actives = laterSections.value.filter((x) => x.project && x.project.status !== "done");
+  return actives.at(-1)?.project?.id === s.project?.id;
+}
+
+onUnmounted(clearGroupDrag);
 
 function onScroll() {
   if (!liftId.value) openId.value = null;

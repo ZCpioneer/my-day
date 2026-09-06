@@ -35,6 +35,7 @@
         @toggle="onToggle"
         @remove="onRemove"
         @move="onMove"
+        @move-group="onMoveGroup"
       />
       <DiaryScreen
         v-else-if="tab === 'diary'"
@@ -499,6 +500,12 @@ async function onMove(id: string, when: "today" | "later", index: number, projec
   await ready;
   await todoRepo.move(id, when, index, { projectId });
   todos.value = await todoRepo.list();
+}
+
+async function onMoveGroup(id: string, index: number) {
+  await ready;
+  await projectRepo.move(id, index);
+  await refreshState();
 }
 
 async function onSaveSettings(next: Settings) {

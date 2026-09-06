@@ -610,6 +610,17 @@ html.native .phone {
   font-size: 11px;
   color: var(--mute);
 }
+.group-handle {
+  color: var(--mute);
+  font-size: 12px;
+  cursor: grab;
+  touch-action: none;
+  padding: 0 2px;
+  align-self: center;
+}
+.group-head.drop-before {
+  box-shadow: 0 -3px 0 0 var(--dawn);
+}
 .todo-group.drop-end::after {
   content: "";
   height: 0;
