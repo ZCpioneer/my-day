@@ -51,4 +51,19 @@ describe("TodoConfirm 按组分组", () => {
     expect(groups).toContain("今天");
     expect(groups).toContain("以后");
   });
+
+  it("组标题 checkbox 整组勾选/取消", async () => {
+    const items: ProposedTodo[] = [
+      { title: "找房", when: "later", project: "搬家" },
+      { title: "打包", when: "later", project: "搬家" },
+      { title: "写稿子", when: "later", project: "发布会" },
+    ];
+    const w = mount(TodoConfirm, { props: { items, existingProjects: [] } });
+    const subChecks = w.findAll(".propose-sub-check input");
+    expect(subChecks).toHaveLength(2);
+    // 默认全勾；取消「搬家」整组
+    await subChecks[0].setValue(false);
+    await w.get(".btn-yes").trigger("click");
+    expect(w.emitted("confirm")?.[0]).toEqual([[{ title: "写稿子", when: "later", project: "发布会" }]]);
+  });
 });

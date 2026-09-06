@@ -44,13 +44,7 @@ describe("GroupSheet manage 模式", () => {
     expect(idle.emitted("complete")?.[0]).toEqual([true]);
   });
 
-  it("done 组显示重新打开；重命名抛出标题", async () => {
-    const w = mount(GroupSheet, {
-      props: { mode: "manage", projects, group: projects[1], openCount: 0 },
-    });
-    await w.get("[data-reopen]").trigger("click");
-    expect(w.emitted("complete")?.[0]).toEqual([false]);
-
+  it("重命名抛出标题", async () => {
     const ren = mount(GroupSheet, {
       props: { mode: "manage", projects, group: projects[0], openCount: 0 },
     });

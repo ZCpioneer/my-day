@@ -28,9 +28,6 @@
         <button v-else-if="group?.status !== 'done'" class="sheet-opt" type="button" data-complete @click="emit('complete', true)">
           完成项目
         </button>
-        <button v-if="group?.status === 'done'" class="sheet-opt" type="button" data-reopen @click="emit('complete', false)">
-          重新打开
-        </button>
       </template>
       <button class="sheet-close" type="button" @click="emit('close')">取消</button>
     </div>

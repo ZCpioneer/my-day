@@ -41,9 +41,10 @@
           :data-done="section.project?.status === 'done' ? '1' : undefined"
           :class="{
             'drop-end':
-              insert?.bucket === 'later' &&
-              insert.beforeId === null &&
-              (insert.group ?? '') === (section.project?.id ?? ''),
+              (insert?.bucket === 'later' &&
+                insert.beforeId === null &&
+                (insert.group ?? '') === (section.project?.id ?? '')) ||
+              isGroupDropEnd(section),
           }"
         >
           <div
@@ -333,9 +334,13 @@ function onGroupPointerUp(e: PointerEvent) {
 
 function isGroupDropBefore(s: LaterSection): boolean {
   const before = groupInsertBefore.value;
-  if (before === null) return false;
-  if (before === "__end__") return groupEndKey.value === null && isLastActive(s);
+  if (before === null || before === "__end__") return false;
   return before === sectionKey(s);
+}
+
+// 落到进行中组末尾：线画在最后一组下方而不是上方。
+function isGroupDropEnd(s: LaterSection): boolean {
+  return groupInsertBefore.value === "__end__" && isLastActive(s);
 }
 
 function isLastActive(s: LaterSection): boolean {

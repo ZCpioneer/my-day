@@ -287,6 +287,12 @@ body::before {
   border-radius: 6px;
   padding: 0 4px;
 }
+.propose-sub-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
 .todo-pick {
   display: flex;
   align-items: flex-start;

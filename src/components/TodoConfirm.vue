@@ -11,7 +11,14 @@
             class="propose-group"
           >{{ s.when === "today" ? "今天" : "以后" }}</p>
           <p v-if="s.project" class="propose-sub">
-            {{ s.project }}<span v-if="s.isNew" class="propose-new">新</span>
+            <label class="propose-sub-check">
+              <input
+                type="checkbox"
+                :checked="s.idxs.every((i) => checked[i])"
+                @change="toggleSection(s, $event)"
+              />
+              <span>{{ s.project }}<span v-if="s.isNew" class="propose-new">新</span></span>
+            </label>
           </p>
           <label v-for="i in s.idxs" :key="`${s.when}-${s.project ?? ''}-${i}`" class="todo-pick">
             <input v-model="checked[i]" type="checkbox" />
@@ -103,6 +110,12 @@ watch(
 
 function metaFor(it: ProposedTodo): string {
   return todoMeta({ priority: it.priority, due: it.due, project: it.project }, localDate());
+}
+
+// 整组勾选：组标题的 checkbox 一键勾/取消该组全部候选。
+function toggleSection(s: ConfirmSection, e: Event) {
+  const on = (e.target as HTMLInputElement).checked;
+  for (const i of s.idxs) checked.value[i] = on;
 }
 
 function onConfirm() {

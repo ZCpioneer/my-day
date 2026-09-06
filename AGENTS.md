@@ -104,7 +104,7 @@ dist/                  构建产物（cap sync 的 webDir）
 - 测试里通过注入假的 `complete` / `postJson` / `now` 来驱动，不打真实网络。App 级用例 mock `chatCompletions` 时注意：其参数是 `{ apiKey, request, postJson }` 包装，解析调用（`tools: []`）与回复调用（带工具）按此区分；`beforeEach` 垫一条消息可避免主动开场抢 `awaiting`。
 - 新增或修改业务规则时，同步更新对应测试；UI 变更优先考虑屏幕级测试（如 `chat-screen.test.ts`、`todos-screen.test.ts`）。
 - 解析判断的稳定性由语料保证：`src/agent/parse-corpus.ts` 是基准，`parse-corpus.test.ts` 验完整性（进 `npm run test`），`eval/parse.eval.test.ts` 用真实 API 打分（人工跑）。
-- 当前基线：41 个测试文件、199 个用例全部通过（`npm run test`，2026-09-06 核实）。
+- 当前基线：41 个测试文件、201 个用例全部通过（`npm run test`，2026-09-06 核实）。
 
 ## 安全注意事项
 

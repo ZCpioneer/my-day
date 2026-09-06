@@ -314,6 +314,26 @@ describe("TodoScreen 组排序", () => {
     expect(w.find("[data-group=p3] [data-group-handle]").exists()).toBe(false);
     expect(w.find("[data-group=p1] [data-group-handle]").exists()).toBe(true);
   });
+
+  it("拖到进行中组末尾：插入线画在末组下方（drop-end）", async () => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    const w = mount(TodoScreen, { props: { todos: trioTodos, projects: trioProjects }, attachTo: document.body });
+    await flushPromises();
+    mockRect(w.get("[data-group=p1]").element as HTMLElement, 0, 100);
+    mockRect(w.get("[data-group=p2]").element as HTMLElement, 100, 200);
+    mockRect(w.get("[data-group=p3]").element as HTMLElement, 200, 300);
+
+    const handle = w.get("[data-group=p1] [data-group-handle]");
+    await handle.trigger("pointerdown", { clientX: 10, clientY: 20, pointerId: 7 });
+    await vi.advanceTimersByTimeAsync(HOLD_MS);
+    // 拖到 p3 中点（250）之下 → 进行中组末尾
+    await handle.trigger("pointermove", { clientX: 10, clientY: 280, pointerId: 7 });
+    expect(w.get("[data-group=p3]").classes()).toContain("drop-end");
+    await handle.trigger("pointerup", { clientX: 10, clientY: 280, pointerId: 7 });
+    expect(w.emitted("moveGroup")?.[0]).toEqual(["p1", 2]);
+    w.unmount();
+  });
 });
 
 describe("TodoScreen 手动改组", () => {
