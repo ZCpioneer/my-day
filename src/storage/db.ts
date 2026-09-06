@@ -3,7 +3,7 @@ import { newId } from "../ids";
 import { applyFullPlan, applyMove, applyTodayPlan } from "../todos";
 import { localDate, shiftLocalDate } from "../dates";
 import { normKey } from "../norm";
-import type { ChatMessage, DailyLog, DayChat, Memory, Project, TimelineEvent, Todo, Waiting } from "../types";
+import type { ChatMessage, DailyLog, DayChat, Project, TimelineEvent, Todo, Waiting } from "../types";
 
 const DB_NAME = "zhaomu";
 const DB_VERSION = 2;
@@ -19,6 +19,7 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("events")) db.createObjectStore("events", { keyPath: "id" });
       if (!db.objectStoreNames.contains("projects")) db.createObjectStore("projects", { keyPath: "id" });
       if (!db.objectStoreNames.contains("waitings")) db.createObjectStore("waitings", { keyPath: "id" });
+      // memories 功能已下线；store 保留占位（v2 已发布，删除需再升版本迁移）。
       if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
@@ -314,33 +315,6 @@ export const waitingRepo = {
       w.resolvedAt = now.toISOString();
       store.put(w);
     }
-    await txDone(tx);
-    db.close();
-  },
-};
-
-export const memoryRepo = {
-  async add(m: Memory): Promise<void> {
-    const db = await openDb();
-    const tx = db.transaction("memories", "readwrite");
-    tx.objectStore("memories").put(m);
-    await txDone(tx);
-    db.close();
-  },
-  async list(): Promise<Memory[]> {
-    const db = await openDb();
-    const rows = await new Promise<Memory[]>((resolve, reject) => {
-      const req = db.transaction("memories").objectStore("memories").getAll();
-      req.onsuccess = () => resolve(req.result as Memory[]);
-      req.onerror = () => reject(req.error);
-    });
-    db.close();
-    return rows;
-  },
-  async remove(id: string): Promise<void> {
-    const db = await openDb();
-    const tx = db.transaction("memories", "readwrite");
-    tx.objectStore("memories").delete(id);
     await txDone(tx);
     db.close();
   },

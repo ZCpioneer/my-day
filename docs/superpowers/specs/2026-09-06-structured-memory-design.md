@@ -1,7 +1,8 @@
 # 结构化记忆架构设计（解析层 + Timeline/State/Memory + Context Builder）
 
 日期：2026-09-06
-状态：已实现（P1 + P2），实现计划：`docs/superpowers/plans/2026-09-06-structured-memory.md`
+状态：已实现，同日修订：**长期记忆（Memory 层）整体下线**——定位收敛为「当天的整理秘书」，偏好/目标/感慨类输入不抽不存。`memories` store 保留占位（v2 已发布），解析契约、路由、确认框、设置页、上下文中的 memory 相关部分均已移除；语料中偏好/目标类用例的正确结果改为「不落任何库」。下文中 Memory 相关章节仅作历史记录。
+实现计划：`docs/superpowers/plans/2026-09-06-structured-memory.md`
 产品名：朝暮（仓库 `my-day`）
 
 ## 0. 背景与目标

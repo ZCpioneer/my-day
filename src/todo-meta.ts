@@ -10,15 +10,14 @@ export function dueLabel(due: string, today: string): string {
   return `${Number(day.slice(5, 7))}月${Number(day.slice(8, 10))}日`;
 }
 
-/** 确认框与待办行共用的徽标行：急 · 截止 · 项目 · 标签。 */
+/** 确认框与待办行共用的徽标行：急 · 截止 · 项目。 */
 export function todoMeta(
-  input: { priority?: "high" | "normal"; due?: string; project?: string; tag?: string },
+  input: { priority?: "high" | "normal"; due?: string; project?: string },
   today: string,
 ): string {
   const parts: string[] = [];
   if (input.priority === "high") parts.push("急");
   if (input.due) parts.push(dueLabel(input.due, today));
   if (input.project) parts.push(input.project);
-  if (input.tag) parts.push(input.tag);
   return parts.join(" · ");
 }

@@ -3,7 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { chatCompletions } from "@/api/deepseek";
 import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
 import { localDate } from "@/dates";
-import { chatRepo, deleteDb, eventRepo, memoryRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
+import { chatRepo, deleteDb, eventRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import App from "@/App.vue";
 
 vi.mock("@/api/deepseek", async (importOriginal) => {
@@ -52,7 +52,6 @@ describe("解析 → 确认 → 落库", () => {
         projectUpdates: [{ project: "接私活", note: "快到截止了" }],
         waitings: [{ text: "等房东答复", waitingOn: "房东" }],
         waitingsResolved: [],
-        memories: [],
       }),
       "已记下。",
     );
@@ -88,7 +87,7 @@ describe("解析 → 确认 → 落库", () => {
     expect(await todoRepo.list()).toEqual([]);
   });
 
-  it("记忆候选跳过则不落库", async () => {
+  it("偏好/目标类话语不落任何库、不弹确认框", async () => {
     mockPipeline(
       JSON.stringify({
         events: [],
@@ -97,18 +96,17 @@ describe("解析 → 确认 → 落库", () => {
         projectUpdates: [],
         waitings: [],
         waitingsResolved: [],
-        memories: [{ text: "早上不开会", kind: "preference" }],
       }),
-      "记住了。",
+      "明白了。",
     );
     const w = mount(App);
     await waitFor(() => w.find("input").exists());
     await w.get("input").setValue("以后早上别给我排会");
     await w.get("button.send").trigger("click");
-    await waitFor(() => w.text().includes("记进长期记忆吗？"));
-    await w.get(".btn-no").trigger("click");
-    await waitFor(() => w.text().includes("记住了。"));
-    expect(await memoryRepo.list()).toEqual([]);
+    await waitFor(() => w.text().includes("明白了。"));
+    expect(w.text()).not.toContain("记到「以后」吗？");
+    expect(await todoRepo.list()).toEqual([]);
+    expect(await eventRepo.listRecent(1)).toEqual([]);
   });
 
   it("解析失败（非 JSON）时对话照常", async () => {

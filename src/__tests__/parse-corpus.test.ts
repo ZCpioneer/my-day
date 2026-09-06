@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PARSE_CORPUS } from "@/agent/parse-corpus";
 
-const EXPECT_KEYS = ["tasks", "notTasks", "events", "decisions", "waitings", "memories", "notMemories", "chitchat"];
+const EXPECT_KEYS = ["tasks", "notTasks", "events", "decisions", "waitings", "chitchat"];
 
 describe("PARSE_CORPUS", () => {
-  it("至少 20 条，覆盖随口一说与长期记忆两类区分", () => {
+  it("至少 20 条，覆盖随口一说与「不落库」两类区分", () => {
     expect(PARSE_CORPUS.length).toBeGreaterThanOrEqual(20);
     expect(PARSE_CORPUS.some((c) => (c.expect.notTasks?.length ?? 0) > 0)).toBe(true);
-    expect(PARSE_CORPUS.some((c) => (c.expect.memories?.length ?? 0) > 0)).toBe(true);
-    expect(PARSE_CORPUS.some((c) => (c.expect.notMemories?.length ?? 0) > 0)).toBe(true);
+    expect(PARSE_CORPUS.some((c) => (c.expect.tasks?.length ?? 0) > 0)).toBe(true);
     expect(PARSE_CORPUS.some((c) => c.expect.chitchat === true)).toBe(true);
   });
 
@@ -23,14 +22,10 @@ describe("PARSE_CORPUS", () => {
     }
   });
 
-  it("chitchat 不与其它断言混用，记忆类别合法", () => {
+  it("chitchat 不与 tasks 断言混用", () => {
     for (const c of PARSE_CORPUS) {
       if (c.expect.chitchat) {
         expect(c.expect.tasks ?? []).toEqual([]);
-        expect(c.expect.memories ?? []).toEqual([]);
-      }
-      for (const m of c.expect.memories ?? []) {
-        expect(["preference", "goal", "watch"]).toContain(m.kind);
       }
     }
   });

@@ -733,13 +733,3 @@ html.native .phone {
   opacity: 0.6;
   margin-left: 6px;
 }
-
-.memory-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-}
-.memory-text {
-  flex: 1;
-}

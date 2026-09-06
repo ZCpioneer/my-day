@@ -80,7 +80,7 @@ watch(
 );
 
 function metaFor(it: ProposedTodo): string {
-  return todoMeta({ priority: it.priority, due: it.due, project: it.project, tag: it.tag }, localDate());
+  return todoMeta({ priority: it.priority, due: it.due, project: it.project }, localDate());
 }
 
 function onConfirm() {

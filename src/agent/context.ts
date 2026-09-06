@@ -1,17 +1,15 @@
 import type { ApiMessage } from "@/api/deepseek";
 import { normKey } from "@/norm";
 import { isChitchat } from "./parse";
-import {
-  MEMORY_KIND_LABEL,
-  type ChatMessage,
-  type ChatMode,
-  type DailyLog,
-  type Memory,
-  type ParseResult,
-  type Project,
-  type TimelineEvent,
-  type Todo,
-  type Waiting,
+import type {
+  ChatMessage,
+  ChatMode,
+  DailyLog,
+  ParseResult,
+  Project,
+  TimelineEvent,
+  Todo,
+  Waiting,
 } from "@/types";
 
 /** 注入的聊天历史上限：事实已被解析层抽走，历史只负责语气与连贯。 */
@@ -46,11 +44,6 @@ function formatProjects(projects: Project[]): string {
 function formatWaitings(waitings: Waiting[]): string {
   if (waitings.length === 0) return "等待中 0 件。";
   return `等待中 ${waitings.length} 件：${waitings.map((w) => (w.waitingOn ? `${w.text}（等${w.waitingOn}）` : w.text)).join("；")}。`;
-}
-
-function formatMemories(memories: Memory[]): string {
-  if (memories.length === 0) return "长期记忆 0 条。";
-  return `长期记忆 ${memories.length} 条：${memories.map((m) => `[${MEMORY_KIND_LABEL[m.kind]}]${m.text}`).join("；")}。`;
 }
 
 export function matchedProjectKeys(result: ParseResult): string[] {
@@ -89,7 +82,6 @@ export function buildContextMessages(input: {
   yesterdayLog?: DailyLog | null;
   projects?: Project[];
   waitings?: Waiting[];
-  memories?: Memory[];
   parseResult?: ParseResult | null;
   recentEvents?: TimelineEvent[];
 }): ApiMessage[] {
@@ -102,7 +94,6 @@ export function buildContextMessages(input: {
     formatBucket("今日已完成", input.doneToday),
     formatProjects(input.projects ?? []),
     formatWaitings(input.waitings ?? []),
-    formatMemories(input.memories ?? []),
     formatEvents(selectRelevantEvents(input.recentEvents ?? [], input.parseResult, input.date)),
     "待办列表是唯一真相。有没有完成，只看上面的分区，不要根据聊天记录判断。以后不算没做完。",
   ].join("");

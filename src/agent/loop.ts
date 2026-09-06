@@ -3,7 +3,7 @@ import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { filterTodayPlanItems } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
-import type { ChatMessage, ChatMode, DailyLog, Memory, ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
+import type { ChatMessage, ChatMode, DailyLog, ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
 import { buildContextMessages } from "./context";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
@@ -15,7 +15,7 @@ export interface AgentDeps {
   listTodos: () => Promise<Todo[]>;
   setTodayPlan: (items: ProposedTodo[]) => Promise<void>;
   now: () => Date;
-  onPropose: (items: ProposedTodo[], kind: "later" | "today" | "memory") => Promise<ProposedTodo[]>;
+  onPropose: (items: ProposedTodo[], kind: "later" | "today") => Promise<ProposedTodo[]>;
 }
 
 function formatTimeLabel(now: Date): string {
@@ -103,7 +103,6 @@ export async function runAgent(input: {
   yesterdayLog?: DailyLog | null;
   projects?: Project[];
   waitings?: Waiting[];
-  memories?: Memory[];
   parseResult?: ParseResult | null;
   recentEvents?: TimelineEvent[];
 }): Promise<{ assistantText: string; stopped: boolean }> {
@@ -127,7 +126,6 @@ export async function runAgent(input: {
       yesterdayLog: input.yesterdayLog ?? null,
       projects: input.projects ?? [],
       waitings: input.waitings ?? [],
-      memories: input.memories ?? [],
       parseResult: input.parseResult ?? null,
       recentEvents: input.recentEvents ?? [],
     }),

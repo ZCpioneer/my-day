@@ -16,9 +16,8 @@ describe("dueLabel", () => {
 });
 
 describe("todoMeta", () => {
-  it("拼接 急/截止/项目/标签", () => {
+  it("拼接 急/截止/项目", () => {
     expect(todoMeta({ priority: "high", due: "2026-09-07", project: "接私活" }, "2026-09-06")).toBe("急 · 明天 · 接私活");
-    expect(todoMeta({ tag: "偏好" }, "2026-09-06")).toBe("偏好");
     expect(todoMeta({}, "2026-09-06")).toBe("");
     expect(todoMeta({ priority: "normal" }, "2026-09-06")).toBe("");
   });

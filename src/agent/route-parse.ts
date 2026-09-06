@@ -1,7 +1,5 @@
 import { normKey } from "@/norm";
 import type {
-  Memory,
-  MemoryCandidate,
   ParseResult,
   Project,
   ProposedTodo,
@@ -17,7 +15,6 @@ export interface RouteDeps {
   listOpenWaitings: () => Promise<Waiting[]>;
   resolveWaiting: (id: string) => Promise<void>;
   listTodos: () => Promise<Todo[]>;
-  listMemories: () => Promise<Memory[]>;
   now: () => Date;
   newId: () => string;
 }
@@ -25,11 +22,9 @@ export interface RouteDeps {
 export interface RouteOutcome {
   /** 去重后的待确认任务（确认后才落库）。 */
   proposedTasks: ProposedTodo[];
-  /** 去重后的待确认记忆候选（确认后才落库）。 */
-  memoryCandidates: MemoryCandidate[];
 }
 
-/** 解析产出的路由：事实自动落 Timeline/State；任务与记忆只返回候选，等用户确认。 */
+/** 解析产出的路由：事实自动落 Timeline/State；任务只返回候选，等用户确认。 */
 export async function routeParseResult(
   result: ParseResult,
   opts: { date: string; messageId: string },
@@ -77,15 +72,5 @@ export async function routeParseResult(
     });
   }
 
-  const memories = await deps.listMemories();
-  const seenMem = new Set(memories.map((m) => normKey(m.text)));
-  const memoryCandidates: MemoryCandidate[] = [];
-  for (const m of result.memories) {
-    const key = normKey(m.text);
-    if (!key || seenMem.has(key)) continue;
-    seenMem.add(key);
-    memoryCandidates.push(m);
-  }
-
-  return { proposedTasks, memoryCandidates };
+  return { proposedTasks };
 }

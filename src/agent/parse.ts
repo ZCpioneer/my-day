@@ -1,6 +1,6 @@
 import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
 import { debugLog } from "@/debug/log";
-import type { MemoryCandidate, ParsedTask, ParsedWaiting, ParseResult, ProjectUpdate } from "@/types";
+import type { ParsedTask, ParsedWaiting, ParseResult, ProjectUpdate } from "@/types";
 import { parseJsonObject } from "./parse-json";
 
 export function emptyParseResult(): ParseResult {
@@ -11,7 +11,6 @@ export function emptyParseResult(): ParseResult {
     projectUpdates: [],
     waitings: [],
     waitingsResolved: [],
-    memories: [],
   };
 }
 
@@ -22,8 +21,7 @@ export function isChitchat(r: ParseResult): boolean {
       r.tasks.length +
       r.projectUpdates.length +
       r.waitings.length +
-      r.waitingsResolved.length +
-      r.memories.length ===
+      r.waitingsResolved.length ===
     0
   );
 }
@@ -84,20 +82,6 @@ function asWaitings(v: unknown): ParsedWaiting[] {
   return out;
 }
 
-function asMemories(v: unknown): MemoryCandidate[] {
-  if (!Array.isArray(v)) return [];
-  const out: MemoryCandidate[] = [];
-  for (const it of v) {
-    if (!it || typeof it !== "object") continue;
-    const o = it as Record<string, unknown>;
-    const text = asString(o.text);
-    const kind = o.kind === "preference" || o.kind === "goal" || o.kind === "watch" ? o.kind : undefined;
-    if (!text || !kind) continue;
-    out.push({ text, kind });
-  }
-  return out;
-}
-
 export function asParseResult(raw: unknown): ParseResult {
   if (!raw || typeof raw !== "object") return emptyParseResult();
   const o = raw as Record<string, unknown>;
@@ -108,7 +92,6 @@ export function asParseResult(raw: unknown): ParseResult {
     projectUpdates: asProjectUpdates(o.projectUpdates),
     waitings: asWaitings(o.waitings),
     waitingsResolved: asStringList(o.waitingsResolved),
-    memories: asMemories(o.memories),
   };
 }
 
@@ -122,14 +105,13 @@ export function parseSystemPrompt(): string {
 - projectUpdates: { "project": string, "note": string, "status"?: "active"|"done"|"paused" }[] 某个项目的进展；project 优先用现有项目标题，没有就起个短名；status 只在明确完结或暂停时给
 - waitings: { "text": string, "waitingOn"?: string }[] 正在等别人或等外部条件的事
 - waitingsResolved: string[] 这句话表明之前等待的事有了结果（按等待内容简述）
-- memories: { "text": string, "kind": "preference"|"goal"|"watch" }[] 长期记忆候选
 
 判断规则：
 1. 随口一说不是 task：愿望（"好想…"）、假设（"要是有空…"）、吐槽、情绪、已发生无需行动的事、别人的事，都不是 task。只有用户自己要采取的行动才是 task。
-2. 一个月后它还会影响你给用户的建议，才进 memories：preference 稳定偏好、goal 长期目标、watch 持续关注。单次事件、具体任务、临时状态（"今天累了"）一律不进。
+2. 偏好、目标、感慨这类长期内容不属于任何一类：不要为它们造 task，也不用记录。这个工具只管当下。
 3. due 用 ISO 日期（如 2026-09-07）；只有话里能推出具体时间时才给。
 4. priority 只在明显要紧（紧迫截止、用户强调）时给 "high"。
-5. 没有对应的类别就留空数组。纯闲聊六个数组全空。
+5. 没有对应的类别就留空数组。纯闲聊五个数组全空。
 6. 不要编造用户没说的内容。`;
 }
 

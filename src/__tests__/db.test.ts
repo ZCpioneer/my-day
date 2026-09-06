@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { chatRepo, deleteDb, eventRepo, logRepo, memoryRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
+import { chatRepo, deleteDb, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import type { ChatMessage, Todo, DailyLog } from "@/types";
 
 beforeEach(async () => {
@@ -243,14 +243,5 @@ describe("waitingRepo", () => {
     expect((await waitingRepo.listOpen()).map((w) => w.id)).toEqual(["w1"]);
     await waitingRepo.resolve("w1", new Date(2026, 8, 6, 18, 0, 0));
     expect(await waitingRepo.listOpen()).toEqual([]);
-  });
-});
-
-describe("memoryRepo", () => {
-  it("增删查", async () => {
-    await memoryRepo.add({ id: "mem1", text: "早上不开会", kind: "preference", createdAt: "2026-09-06T01:00:00.000Z" });
-    expect((await memoryRepo.list()).map((m) => m.text)).toEqual(["早上不开会"]);
-    await memoryRepo.remove("mem1");
-    expect(await memoryRepo.list()).toEqual([]);
   });
 });

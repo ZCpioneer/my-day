@@ -43,7 +43,7 @@
         :composing="composingDiary"
         @compose="onComposeDiary"
       />
-      <SettingsScreen v-else :settings="settings" :memories="memories" @save="onSaveSettings" @remove-memory="onRemoveMemory" />
+      <SettingsScreen v-else :settings="settings" @save="onSaveSettings" />
     </div>
     <div class="dock-wrap">
       <nav class="dock">
@@ -93,17 +93,14 @@ import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
 import { normKey } from "@/norm";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
-import { chatRepo, eventRepo, logRepo, memoryRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
+import { chatRepo, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
 import {
   DEFAULT_MODEL,
-  MEMORY_KIND_LABEL,
   type ChatMessage,
   type ChatMode,
   type DailyLog,
   type DayChat,
-  type Memory,
-  type MemoryCandidate,
   type ParseResult,
   type Project,
   type ProposedTodo,
@@ -124,18 +121,16 @@ const settings = ref<Settings>({
 const todos = ref<Todo[]>([]);
 const projects = ref<Project[]>([]);
 const waitings = ref<Waiting[]>([]);
-const memories = ref<Memory[]>([]);
 const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
-const proposeKind = ref<"later" | "today" | "memory">("later");
+const proposeKind = ref<"later" | "today">("later");
 const awaiting = ref(false);
 const composingDiary = ref(false);
 const catchUpNote = ref("");
 const activeSession = ref<"morning" | "evening">(ritualForNow());
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
-let pendingMemoryCandidates: MemoryCandidate[] = [];
 let catchUpRunning = false;
 let dayTick: number | undefined;
 let closedThisTurn = false;
@@ -178,7 +173,6 @@ async function complete(req: ChatCompletionRequest) {
 async function refreshState() {
   projects.value = await projectRepo.list();
   waitings.value = await waitingRepo.listOpen();
-  memories.value = await memoryRepo.list();
 }
 
 const routeDeps: RouteDeps = {
@@ -188,7 +182,6 @@ const routeDeps: RouteDeps = {
   listOpenWaitings: () => waitingRepo.listOpen(),
   resolveWaiting: (id) => waitingRepo.resolve(id),
   listTodos: () => todoRepo.list(),
-  listMemories: () => memoryRepo.list(),
   now: () => new Date(),
   newId,
 };
@@ -215,7 +208,7 @@ async function addTodos(items: ProposedTodo[]) {
   todos.value = await todoRepo.list();
 }
 
-function onPropose(items: ProposedTodo[], kind: "later" | "today" | "memory"): Promise<ProposedTodo[]> {
+function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
   proposeKind.value = kind;
   pendingPropose.value = items;
   return new Promise((resolve) => {
@@ -311,19 +304,6 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
           debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
         }
       }
-      if (routed.memoryCandidates.length > 0) {
-        pendingMemoryCandidates = routed.memoryCandidates;
-        const accepted = await onPropose(
-          routed.memoryCandidates.map((m) => ({ title: m.text, tag: MEMORY_KIND_LABEL[m.kind] })),
-          "memory",
-        );
-        for (const a of accepted) {
-          const m = pendingMemoryCandidates.find((x) => x.text === a.title);
-          if (m) await memoryRepo.add({ id: newId(), text: m.text, kind: m.kind, createdAt: new Date().toISOString() });
-        }
-        pendingMemoryCandidates = [];
-        await refreshState();
-      }
     }
     const yesterdayLog = await logRepo.get(shiftLocalDate(date.value, -1));
     const { assistantText } = await runAgent({
@@ -336,7 +316,6 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       yesterdayLog,
       projects: projects.value,
       waitings: waitings.value,
-      memories: memories.value,
       parseResult,
       recentEvents: await eventRepo.listRecent(3),
     });
@@ -528,11 +507,5 @@ async function onSaveSettings(next: Settings) {
   await saveSettings(saved);
   settings.value = saved;
   if (!awaiting.value) activeSession.value = ritualForNow(new Date(), saved.daySplitHour);
-}
-
-async function onRemoveMemory(id: string) {
-  await ready;
-  await memoryRepo.remove(id);
-  memories.value = await memoryRepo.list();
 }
 </script>

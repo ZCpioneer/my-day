@@ -36,20 +36,6 @@ describe("ChatScreen", () => {
     expect(confirm.text()).toContain("买机票");
   });
 
-  it("memory 确认框用记忆文案并展示类别标签", () => {
-    const w = mount(ChatScreen, {
-      props: {
-        messages: [],
-        awaiting: true,
-        pendingPropose: [{ title: "早上不开会", tag: "偏好" }],
-        proposeKind: "memory",
-      },
-    });
-    expect(w.text()).toContain("记进长期记忆吗？");
-    expect(w.text()).toContain("记住");
-    expect(w.text()).toContain("偏好");
-  });
-
   it("later 确认框展示 急/截止/项目 徽标", () => {
     const w = mount(ChatScreen, {
       props: {

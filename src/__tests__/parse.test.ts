@@ -23,7 +23,6 @@ describe("asParseResult", () => {
       projectUpdates: [{ project: "朝暮", note: "解析层联调完了", status: "active" }, { note: "没项目名" }],
       waitings: [{ text: "等房东答复", waitingOn: "房东" }, { waitingOn: "没文本" }],
       waitingsResolved: ["房东答复了", 1],
-      memories: [{ text: "早上不开会", kind: "preference" }, { text: "坏类型", kind: "mood" }],
     });
     expect(r.events).toEqual(["中午吃了螺蛳粉"]);
     expect(r.decisions).toEqual(["定了用 Postgres"]);
@@ -34,7 +33,6 @@ describe("asParseResult", () => {
     expect(r.projectUpdates).toEqual([{ project: "朝暮", note: "解析层联调完了", status: "active" }]);
     expect(r.waitings).toEqual([{ text: "等房东答复", waitingOn: "房东" }]);
     expect(r.waitingsResolved).toEqual(["房东答复了"]);
-    expect(r.memories).toEqual([{ text: "早上不开会", kind: "preference" }]);
   });
 });
 
@@ -46,10 +44,11 @@ describe("isChitchat", () => {
 });
 
 describe("parseSystemPrompt", () => {
-  it("写入了随口一说/长期记忆两条核心判定规则", () => {
+  it("写入了随口一说的判定规则，且不做长期记忆", () => {
     const p = parseSystemPrompt();
     expect(p).toContain("随口一说");
-    expect(p).toContain("一个月后");
+    expect(p).toContain("只管当下");
+    expect(p).not.toContain("memories");
     expect(p).toContain("只输出一个 JSON 对象");
   });
 });
@@ -58,7 +57,7 @@ describe("parseInput", () => {
   it("成功时返回解析结果", async () => {
     const complete = async (): Promise<ChatCompletionResponse> => ({
       content:
-        '{"events":["下雨了"],"decisions":[],"tasks":[],"projectUpdates":[],"waitings":[],"waitingsResolved":[],"memories":[]}',
+        '{"events":["下雨了"],"decisions":[],"tasks":[],"projectUpdates":[],"waitings":[],"waitingsResolved":[]}',
       tool_calls: [],
     });
     const r = await parseInput({ text: "下雨了", date: "2026-09-06", todos: [], projects: [], model: "m", complete });

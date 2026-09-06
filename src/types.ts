@@ -86,8 +86,6 @@ export interface ProposedTodo {
   due?: string;
   /** 项目标题，落库时解析成 projectId。 */
   project?: string;
-  /** 确认框上的展示标签（如记忆类别），不落库。 */
-  tag?: string;
 }
 
 export interface TimelineEvent {
@@ -123,19 +121,6 @@ export interface Waiting {
   fromMessageId: string;
 }
 
-export interface Memory {
-  id: string;
-  text: string;
-  kind: "preference" | "goal" | "watch";
-  createdAt: string;
-}
-
-export const MEMORY_KIND_LABEL: Record<Memory["kind"], string> = {
-  preference: "偏好",
-  goal: "目标",
-  watch: "关注",
-};
-
 export interface ParsedTask {
   title: string;
   reason?: string;
@@ -156,12 +141,7 @@ export interface ParsedWaiting {
   waitingOn?: string;
 }
 
-export interface MemoryCandidate {
-  text: string;
-  kind: "preference" | "goal" | "watch";
-}
-
-/** 解析层对一条用户输入的结构化产出；六类全空 = 纯闲聊。 */
+/** 解析层对一条用户输入的结构化产出；全空 = 纯闲聊。 */
 export interface ParseResult {
   events: string[];
   decisions: string[];
@@ -169,7 +149,6 @@ export interface ParseResult {
   projectUpdates: ProjectUpdate[];
   waitings: ParsedWaiting[];
   waitingsResolved: string[];
-  memories: MemoryCandidate[];
 }
 
 export const DEFAULT_MODEL = "deepseek-v4-flash";

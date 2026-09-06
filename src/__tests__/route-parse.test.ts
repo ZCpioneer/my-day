@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyParseResult } from "@/agent/parse";
 import { routeParseResult, type RouteDeps } from "@/agent/route-parse";
-import type { Memory, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
+import type { ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
 
 function makeDeps(over?: Partial<RouteDeps>) {
   const events: TimelineEvent[] = [];
@@ -25,7 +25,6 @@ function makeDeps(over?: Partial<RouteDeps>) {
       resolved.push(id);
     },
     listTodos: async () => [],
-    listMemories: async () => [],
     now: () => new Date(2026, 8, 6, 10, 0, 0),
     newId: (() => {
       let i = 0;
@@ -57,15 +56,13 @@ describe("routeParseResult", () => {
     expect(projects).toEqual([{ title: "朝暮", note: "解析层联调完了" }]);
     expect(waitings.map((w) => w.text)).toEqual(["等房东答复"]);
     expect(out.proposedTasks).toEqual([]);
-    expect(out.memoryCandidates).toEqual([]);
   });
 
-  it("tasks 与 memories 不落库，去重后返回待确认", async () => {
+  it("tasks 不落库，去重后返回待确认", async () => {
     const existing: Todo[] = [
       { id: "t1", title: "给妈妈回电话", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z" },
     ];
-    const mems: Memory[] = [{ id: "m", text: "早上不开会", kind: "preference", createdAt: "2026-09-06T01:00:00.000Z" }];
-    const { deps, events } = makeDeps({ listTodos: async () => existing, listMemories: async () => mems });
+    const { deps, events } = makeDeps({ listTodos: async () => existing });
     const r = {
       ...emptyParseResult(),
       tasks: [
@@ -73,17 +70,12 @@ describe("routeParseResult", () => {
         { title: "明天下午三点前交稿", priority: "high" as const, due: "2026-09-07", project: "接私活" },
         { title: " 给 妈妈 回电话 " },
       ],
-      memories: [
-        { text: "早上不开会", kind: "preference" as const },
-        { text: "今年写完初稿", kind: "goal" as const },
-      ],
     };
     const out = await routeParseResult(r, OPTS, deps);
     expect(events).toEqual([]);
     expect(out.proposedTasks).toEqual([
       { title: "明天下午三点前交稿", reason: undefined, when: "later", priority: "high", due: "2026-09-07", project: "接私活" },
     ] satisfies ProposedTodo[]);
-    expect(out.memoryCandidates).toEqual([{ text: "今年写完初稿", kind: "goal" }]);
   });
 
   it("waitingsResolved 按文本匹配解决等待", async () => {
