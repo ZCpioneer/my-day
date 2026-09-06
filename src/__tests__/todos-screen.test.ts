@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import TodoScreen from "@/screens/TodoScreen.vue";
 import { todoRepo, deleteDb } from "@/storage/db";
 import { HOLD_MS } from "@/todo-drag";
-import type { Todo } from "@/types";
+import type { Project, Todo } from "@/types";
 
 function mockRect(el: HTMLElement, top: number, bottom: number) {
   el.getBoundingClientRect = () =>
@@ -159,5 +159,46 @@ describe("TodoScreen", () => {
     expect(w.get("[data-todo=t3]").classes()).toContain("drop-before");
     await row.trigger("pointerup", { clientX: 40, clientY: 180, pointerId: 1 });
     expect(w.emitted("move")?.[0]).toEqual(["t1", "today", 1]);
+  });
+});
+
+describe("TodoScreen 项目分区", () => {
+  const groupedTodos: Todo[] = [
+    { id: "g1", title: "找房", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "g2", title: "打包", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T02:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "g3", title: "已做完", status: "done", sourceDate: "2026-09-06", createdAt: "2026-09-06T03:00:00.000Z", completedAt: "2026-09-05T10:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "u1", title: "零散事", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T04:00:00.000Z", when: "later" },
+  ];
+  const groupedProjects: Project[] = [
+    { id: "p1", title: "搬家", status: "active", createdAt: "2026-09-06T01:00:00.000Z", updatedAt: "2026-09-06T01:00:00.000Z" },
+    { id: "p2", title: "发布会", status: "done", createdAt: "2026-09-05T01:00:00.000Z", updatedAt: "2026-09-05T02:00:00.000Z" },
+  ];
+
+  it("以后栏按组分区：组名、进度、未分组区、已完成组沉底灰显", async () => {
+    localStorage.clear();
+    const w = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
+    await flushPromises();
+    const keys = w.findAll("[data-group]").map((el) => el.attributes("data-group"));
+    expect(keys).toEqual(["p1", "", "p2"]);
+    expect(w.get("[data-group=p1]").text()).toContain("搬家");
+    expect(w.get("[data-group=p1]").text()).toContain("1/3");
+    expect(w.get("[data-group=p1]").text()).toContain("找房");
+    expect(w.get("[data-group='']").text()).toContain("未分组");
+    expect(w.get("[data-group='']").text()).toContain("零散事");
+    const doneHead = w.get("[data-group=p2] .group-head");
+    expect(doneHead.text()).toContain("发布会");
+    expect(doneHead.classes()).toContain("done");
+  });
+
+  it("点组标题折叠/展开，状态写进 localStorage", async () => {
+    localStorage.clear();
+    const w = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
+    await flushPromises();
+    await w.get("[data-group=p1] .group-head").trigger("click");
+    expect(w.find("[data-group=p1] [data-todo=g1]").exists()).toBe(false);
+    expect(JSON.parse(localStorage.getItem("zhaomu.collapsed-groups")!)).toContain("p1");
+    const w2 = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
+    await flushPromises();
+    expect(w2.find("[data-group=p1] [data-todo=g1]").exists()).toBe(false);
   });
 });

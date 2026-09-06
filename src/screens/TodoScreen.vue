@@ -33,23 +33,51 @@
       <div
         class="todo-bucket"
         data-bucket="later"
-        :class="{ 'drop-end': insert?.bucket === 'later' && insert.beforeId === null }"
+        :class="{ 'drop-end': insert?.bucket === 'later' && insert.beforeId === null && !insert.group }"
       >
         <div class="section-label">以后</div>
-        <TodoRow
-          v-for="t in later"
-          :key="t.id"
-          :todo="t"
-          :project-title="projectTitles.get(t.projectId ?? '')"
-          :class="{ 'drop-before': insert?.bucket === 'later' && insert.beforeId === t.id }"
-          :revealed="openId === t.id"
-          @toggle="emit('toggle', $event)"
-          @remove="emit('remove', $event)"
-          @reveal="openId = $event"
-          @lift="onLift"
-          @drag="onDrag"
-          @drop="onDrop"
-        />
+        <div
+          v-for="section in laterSections"
+          :key="section.project?.id ?? 'ungrouped'"
+          class="todo-group"
+          :data-group="section.project?.id ?? ''"
+          :data-done="section.project?.status === 'done' ? '1' : undefined"
+          :class="{
+            'drop-end':
+              insert?.bucket === 'later' &&
+              insert.beforeId === null &&
+              (insert.group ?? '') === (section.project?.id ?? '') &&
+              !!insert.group,
+          }"
+        >
+          <div
+            class="group-head"
+            :class="{ done: section.project?.status === 'done' }"
+            @click="onGroupClick(section)"
+          >
+            <span class="group-name">{{ section.project?.title ?? "未分组" }}</span>
+            <span v-if="section.project" class="group-progress">
+              {{ section.doneCount }}/{{ section.totalCount }}
+            </span>
+            <span class="group-arrow">{{ isCollapsed(section) ? "▸" : "▾" }}</span>
+          </div>
+          <template v-if="!isCollapsed(section)">
+            <TodoRow
+              v-for="t in section.todos"
+              :key="t.id"
+              :todo="t"
+              :project-title="projectTitles.get(t.projectId ?? '')"
+              :class="{ 'drop-before': insert?.bucket === 'later' && insert.beforeId === t.id }"
+              :revealed="openId === t.id"
+              @toggle="emit('toggle', $event)"
+              @remove="emit('remove', $event)"
+              @reveal="openId = $event"
+              @lift="onLift"
+              @drag="onDrag"
+              @drop="onDrop"
+            />
+          </template>
+        </div>
         <p v-if="later.length === 0" class="empty" style="margin: 8px 0">没有记着的事。</p>
       </div>
       <div class="todo-bucket" data-bucket="done">
@@ -79,10 +107,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
 import { edgeScrollDelta, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
+import { partitionLater, type LaterSection } from "@/todo-groups";
+import { loadCollapsedGroups, saveCollapsedGroups } from "@/storage/settings";
 import { partitionTodos, todoWhen } from "@/todos";
 import type { Project, Todo } from "@/types";
 
@@ -97,7 +127,7 @@ const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [
 
 const openId = ref<string | null>(null);
 const liftId = ref<string | null>(null);
-const insert = ref<{ bucket: PlanBucket; beforeId: string | null } | null>(null);
+const insert = ref<{ bucket: PlanBucket; group: string | null; beforeId: string | null } | null>(null);
 const ghost = ref<{ title: string; top: number } | null>(null);
 const reduceMotion = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
@@ -108,6 +138,31 @@ const today = computed(() => buckets.value.today);
 const later = computed(() => buckets.value.later);
 const doneToday = computed(() => buckets.value.doneToday);
 const doneTodayPlan = computed(() => doneToday.value.filter((t) => todoWhen(t) === "today"));
+
+const laterSections = computed(() => partitionLater(props.todos, props.projects ?? []));
+
+const collapsed = ref<Set<string>>(new Set());
+onMounted(async () => {
+  collapsed.value = new Set(await loadCollapsedGroups());
+});
+
+function sectionKey(s: LaterSection): string {
+  return s.project?.id ?? "";
+}
+
+function isCollapsed(s: LaterSection): boolean {
+  return collapsed.value.has(sectionKey(s));
+}
+
+async function onGroupClick(s: LaterSection) {
+  if (liftId.value) return;
+  const key = sectionKey(s);
+  const next = new Set(collapsed.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  collapsed.value = next;
+  await saveCollapsedGroups([...next]);
+}
 
 function onScroll() {
   if (!liftId.value) openId.value = null;
@@ -144,7 +199,8 @@ function measureInsert(bucket: PlanBucket, clientY: number, dragId: string) {
     return rect.top + rect.height / 2;
   });
   const index = insertIndex(clientY, midpoints);
-  return { bucket, index, beforeId: rows[index]?.dataset.todo ?? null };
+  // group 占位：以后栏分组命中逻辑在 Task 6 实现，这里先按未命中（null）返回。
+  return { bucket, index, group: null, beforeId: rows[index]?.dataset.todo ?? null };
 }
 
 function onLift(id: string) {
