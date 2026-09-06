@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { chatRepo, todoRepo, logRepo, deleteDb } from "@/storage/db";
+import { chatRepo, deleteDb, eventRepo, logRepo, memoryRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import type { ChatMessage, Todo, DailyLog } from "@/types";
 
 beforeEach(async () => {
@@ -211,5 +211,46 @@ describe("logRepo", () => {
     await logRepo.put({ ...first, state: "还行", updatedAt: "2026-09-05T13:00:00.000Z" });
     const got = await logRepo.get("2026-09-05");
     expect(got?.state).toBe("还行");
+  });
+});
+
+describe("eventRepo", () => {
+  it("listRecent 只返回近 N 天且按时间升序", async () => {
+    const now = new Date(2026, 8, 6, 12, 0, 0);
+    await eventRepo.add({ id: "e1", date: "2026-09-03", createdAt: "2026-09-03T02:00:00.000Z", kind: "event", text: "更早的事", fromMessageId: "m1" });
+    await eventRepo.add({ id: "e2", date: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", kind: "decision", text: "定了用 Postgres", fromMessageId: "m2" });
+    await eventRepo.add({ id: "e3", date: "2026-09-05", createdAt: "2026-09-05T03:00:00.000Z", kind: "event", text: "昨天的事", fromMessageId: "m3" });
+    const recent = await eventRepo.listRecent(3, now);
+    expect(recent.map((e) => e.id)).toEqual(["e3", "e2"]);
+  });
+});
+
+describe("projectRepo", () => {
+  it("upsertByTitle 按归一化标题更新而不是新建", async () => {
+    await projectRepo.upsertByTitle("朝暮 App", { note: "立项" }, new Date(2026, 8, 5));
+    const again = await projectRepo.upsertByTitle("朝暮app", { note: "解析层联调完了" }, new Date(2026, 8, 6));
+    const all = await projectRepo.list();
+    expect(all).toHaveLength(1);
+    expect(all[0].note).toBe("解析层联调完了");
+    expect(again.id).toBe(all[0].id);
+    expect(all[0].status).toBe("active");
+  });
+});
+
+describe("waitingRepo", () => {
+  it("解决后不再出现在 listOpen", async () => {
+    await waitingRepo.add({ id: "w1", text: "等房东答复", waitingOn: "房东", since: "2026-09-06T01:00:00.000Z", fromMessageId: "m1" });
+    expect((await waitingRepo.listOpen()).map((w) => w.id)).toEqual(["w1"]);
+    await waitingRepo.resolve("w1", new Date(2026, 8, 6, 18, 0, 0));
+    expect(await waitingRepo.listOpen()).toEqual([]);
+  });
+});
+
+describe("memoryRepo", () => {
+  it("增删查", async () => {
+    await memoryRepo.add({ id: "mem1", text: "早上不开会", kind: "preference", createdAt: "2026-09-06T01:00:00.000Z" });
+    expect((await memoryRepo.list()).map((m) => m.text)).toEqual(["早上不开会"]);
+    await memoryRepo.remove("mem1");
+    expect(await memoryRepo.list()).toEqual([]);
   });
 });

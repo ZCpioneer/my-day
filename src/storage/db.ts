@@ -1,11 +1,12 @@
 import { closeVisibleSession } from "../chat-session";
 import { newId } from "../ids";
 import { applyFullPlan, applyMove, applyTodayPlan } from "../todos";
-import { localDate } from "../dates";
-import type { ChatMessage, DailyLog, DayChat, Todo } from "../types";
+import { localDate, shiftLocalDate } from "../dates";
+import { normKey } from "../norm";
+import type { ChatMessage, DailyLog, DayChat, Memory, Project, TimelineEvent, Todo, Waiting } from "../types";
 
 const DB_NAME = "zhaomu";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -15,6 +16,10 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "date" });
       if (!db.objectStoreNames.contains("todos")) db.createObjectStore("todos", { keyPath: "id" });
       if (!db.objectStoreNames.contains("logs")) db.createObjectStore("logs", { keyPath: "date" });
+      if (!db.objectStoreNames.contains("events")) db.createObjectStore("events", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("projects")) db.createObjectStore("projects", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("waitings")) db.createObjectStore("waitings", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -207,6 +212,135 @@ export const logRepo = {
     const db = await openDb();
     const tx = db.transaction("logs", "readwrite");
     tx.objectStore("logs").put(log);
+    await txDone(tx);
+    db.close();
+  },
+};
+
+export const eventRepo = {
+  async add(e: TimelineEvent): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("events", "readwrite");
+    tx.objectStore("events").put(e);
+    await txDone(tx);
+    db.close();
+  },
+  async listRecent(days: number, now: Date = new Date()): Promise<TimelineEvent[]> {
+    const db = await openDb();
+    const rows = await new Promise<TimelineEvent[]>((resolve, reject) => {
+      const req = db.transaction("events").objectStore("events").getAll();
+      req.onsuccess = () => resolve(req.result as TimelineEvent[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    const since = shiftLocalDate(localDate(now), -(days - 1));
+    return rows
+      .filter((e) => e.date >= since)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+  },
+};
+
+export const projectRepo = {
+  async list(): Promise<Project[]> {
+    const db = await openDb();
+    const rows = await new Promise<Project[]>((resolve, reject) => {
+      const req = db.transaction("projects").objectStore("projects").getAll();
+      req.onsuccess = () => resolve(req.result as Project[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rows;
+  },
+  async upsertByTitle(
+    title: string,
+    patch: { note?: string; status?: Project["status"] },
+    now: Date = new Date(),
+  ): Promise<Project> {
+    const key = normKey(title);
+    const existing = (await projectRepo.list()).find((p) => normKey(p.title) === key);
+    const nowIso = now.toISOString();
+    const next: Project = existing
+      ? {
+          ...existing,
+          note: patch.note ?? existing.note,
+          status: patch.status ?? existing.status,
+          updatedAt: nowIso,
+        }
+      : {
+          id: newId(),
+          title: title.trim(),
+          status: patch.status ?? "active",
+          note: patch.note,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+    const db = await openDb();
+    const tx = db.transaction("projects", "readwrite");
+    tx.objectStore("projects").put(next);
+    await txDone(tx);
+    db.close();
+    return next;
+  },
+};
+
+export const waitingRepo = {
+  async add(w: Waiting): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("waitings", "readwrite");
+    tx.objectStore("waitings").put(w);
+    await txDone(tx);
+    db.close();
+  },
+  async listOpen(): Promise<Waiting[]> {
+    const db = await openDb();
+    const rows = await new Promise<Waiting[]>((resolve, reject) => {
+      const req = db.transaction("waitings").objectStore("waitings").getAll();
+      req.onsuccess = () => resolve(req.result as Waiting[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rows.filter((w) => !w.resolvedAt);
+  },
+  async resolve(id: string, now: Date = new Date()): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("waitings", "readwrite");
+    const store = tx.objectStore("waitings");
+    const w = await new Promise<Waiting | undefined>((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result as Waiting | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    if (w) {
+      w.resolvedAt = now.toISOString();
+      store.put(w);
+    }
+    await txDone(tx);
+    db.close();
+  },
+};
+
+export const memoryRepo = {
+  async add(m: Memory): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("memories", "readwrite");
+    tx.objectStore("memories").put(m);
+    await txDone(tx);
+    db.close();
+  },
+  async list(): Promise<Memory[]> {
+    const db = await openDb();
+    const rows = await new Promise<Memory[]>((resolve, reject) => {
+      const req = db.transaction("memories").objectStore("memories").getAll();
+      req.onsuccess = () => resolve(req.result as Memory[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rows;
+  },
+  async remove(id: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("memories", "readwrite");
+    tx.objectStore("memories").delete(id);
     await txDone(tx);
     db.close();
   },
