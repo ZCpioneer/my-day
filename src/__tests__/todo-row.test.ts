@@ -76,3 +76,30 @@ describe("TodoRow hold", () => {
     expect(w.emitted("drop")?.[0]).toEqual(["t1", 180]);
   });
 });
+
+describe("TodoRow 徽标", () => {
+  it("展示 priority/due/项目 徽标", () => {
+    const w = mount(TodoRow, {
+      props: {
+        todo: {
+          id: "1",
+          title: "交稿",
+          status: "open",
+          sourceDate: "2026-09-06",
+          createdAt: "2026-09-06T01:00:00.000Z",
+          priority: "high",
+          due: "2099-01-02",
+        },
+        projectTitle: "接私活",
+      },
+    });
+    expect(w.text()).toContain("急");
+    expect(w.text()).toContain("1月2日");
+    expect(w.text()).toContain("接私活");
+  });
+
+  it("没有扩展字段时不渲染徽标行", () => {
+    const w = mount(TodoRow, { props: { todo: openToday } });
+    expect(w.find(".todo-meta").exists()).toBe(false);
+  });
+});

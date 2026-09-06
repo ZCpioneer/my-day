@@ -120,7 +120,7 @@ describe("buildContextMessages", () => {
     expect(blob).toContain("整理今日待办");
   });
 
-  it("includes the whole current session, not only the last 16 turns", () => {
+  it("truncates the session to the most recent turns (facts now live in the parse layer)", () => {
     const messages: ChatMessage[] = Array.from({ length: 18 }, (_, i) => ({
       id: `m${i}`,
       role: "user" as const,
@@ -138,7 +138,8 @@ describe("buildContextMessages", () => {
       planConfirmed: false,
     });
     const blob = JSON.stringify(out);
-    expect(blob).toContain("第0句");
+    expect(blob).not.toContain("第0句");
+    expect(blob).toContain("第6句");
     expect(blob).toContain("第17句");
   });
 });

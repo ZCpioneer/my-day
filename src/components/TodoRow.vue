@@ -16,14 +16,17 @@
       <div class="box">{{ done ? "✓" : "" }}</div>
       <div>
         <p>{{ todo.title }}</p>
+        <p v-if="meta" class="todo-meta">{{ meta }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
+import { localDate } from "@/dates";
 import { HOLD_MS, movementCancelsHold } from "@/todo-drag";
+import { todoMeta } from "@/todo-meta";
 import type { Todo } from "@/types";
 
 const DELETE_W = 76;
@@ -33,7 +36,12 @@ const props = defineProps<{
   todo: Todo;
   done?: boolean;
   revealed?: boolean;
+  projectTitle?: string;
 }>();
+
+const meta = computed(() =>
+  todoMeta({ priority: props.todo.priority, due: props.todo.due, project: props.projectTitle }, localDate()),
+);
 const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];

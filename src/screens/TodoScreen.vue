@@ -18,6 +18,7 @@
           v-for="t in today"
           :key="t.id"
           :todo="t"
+          :project-title="projectTitles.get(t.projectId ?? '')"
           :class="{ 'drop-before': insert?.bucket === 'today' && insert.beforeId === t.id }"
           :revealed="openId === t.id"
           @toggle="emit('toggle', $event)"
@@ -39,6 +40,7 @@
           v-for="t in later"
           :key="t.id"
           :todo="t"
+          :project-title="projectTitles.get(t.projectId ?? '')"
           :class="{ 'drop-before': insert?.bucket === 'later' && insert.beforeId === t.id }"
           :revealed="openId === t.id"
           @toggle="emit('toggle', $event)"
@@ -56,6 +58,7 @@
           v-for="t in doneToday"
           :key="t.id"
           :todo="t"
+          :project-title="projectTitles.get(t.projectId ?? '')"
           done
           :revealed="openId === t.id"
           @toggle="emit('toggle', $event)"
@@ -81,14 +84,16 @@ import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
 import { edgeScrollDelta, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
 import { partitionTodos, todoWhen } from "@/todos";
-import type { Todo } from "@/types";
+import type { Project, Todo } from "@/types";
 
-const props = defineProps<{ todos: Todo[] }>();
+const props = defineProps<{ todos: Todo[]; projects?: Project[] }>();
 const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];
   move: [id: string, when: PlanBucket, index: number];
 }>();
+
+const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
 
 const openId = ref<string | null>(null);
 const liftId = ref<string | null>(null);

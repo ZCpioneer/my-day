@@ -31,6 +31,7 @@
       <TodoScreen
         v-else-if="tab === 'todo'"
         :todos="todos"
+        :projects="projects"
         @toggle="onToggle"
         @remove="onRemove"
         @move="onMove"
@@ -42,7 +43,7 @@
         :composing="composingDiary"
         @compose="onComposeDiary"
       />
-      <SettingsScreen v-else :settings="settings" @save="onSaveSettings" />
+      <SettingsScreen v-else :settings="settings" :memories="memories" @save="onSaveSettings" />
     </div>
     <div class="dock-wrap">
       <nav class="dock">
@@ -76,6 +77,8 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { composeDailyLog } from "@/agent/compose-log";
 import { composePlan } from "@/agent/compose-plan";
 import { runAgent, type AgentDeps } from "@/agent/loop";
+import { parseInput } from "@/agent/parse";
+import { routeParseResult, type RouteDeps } from "@/agent/route-parse";
 import { KICKOFF_TEXT } from "@/agent/prompt";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
@@ -88,18 +91,24 @@ import { catchUpDiary } from "@/diary";
 import { localDate, shiftLocalDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
+import { normKey } from "@/norm";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
-import { chatRepo, logRepo, todoRepo } from "@/storage/db";
+import { chatRepo, eventRepo, logRepo, memoryRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
 import {
   DEFAULT_MODEL,
+  MEMORY_KIND_LABEL,
   type ChatMessage,
   type ChatMode,
   type DailyLog,
   type DayChat,
+  type Memory,
+  type MemoryCandidate,
+  type Project,
   type ProposedTodo,
   type Settings,
   type Todo,
+  type Waiting,
 } from "@/types";
 
 type Tab = "chat" | "todo" | "diary" | "settings";
@@ -112,6 +121,9 @@ const settings = ref<Settings>({
   daySplitHour: DEFAULT_SPLIT_HOUR,
 });
 const todos = ref<Todo[]>([]);
+const projects = ref<Project[]>([]);
+const waitings = ref<Waiting[]>([]);
+const memories = ref<Memory[]>([]);
 const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
@@ -122,6 +134,7 @@ const composingDiary = ref(false);
 const catchUpNote = ref("");
 const activeSession = ref<"morning" | "evening">(ritualForNow());
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
+let pendingMemoryCandidates: MemoryCandidate[] = [];
 let catchUpRunning = false;
 let dayTick: number | undefined;
 let closedThisTurn = false;
@@ -143,6 +156,7 @@ const ready = (async () => {
   settings.value = await loadSettings();
   activeSession.value = ritualForNow(new Date(), settings.value.daySplitHour);
   todos.value = await todoRepo.list();
+  await refreshState();
   await loadDay(date.value);
 })();
 void (async () => {
@@ -160,10 +174,31 @@ async function complete(req: ChatCompletionRequest) {
   return chatCompletions({ apiKey: key, request: req, postJson: activePostJson() });
 }
 
+async function refreshState() {
+  projects.value = await projectRepo.list();
+  waitings.value = await waitingRepo.listOpen();
+  memories.value = await memoryRepo.list();
+}
+
+const routeDeps: RouteDeps = {
+  addEvent: (e) => eventRepo.add(e),
+  upsertProject: (title, patch) => projectRepo.upsertByTitle(title, patch).then(() => undefined),
+  addWaiting: (w) => waitingRepo.add(w),
+  listOpenWaitings: () => waitingRepo.listOpen(),
+  resolveWaiting: (id) => waitingRepo.resolve(id),
+  listTodos: () => todoRepo.list(),
+  listMemories: () => memoryRepo.list(),
+  now: () => new Date(),
+  newId,
+};
+
 async function addTodos(items: ProposedTodo[]) {
   const sourceDate = localDate();
   const createdAt = new Date().toISOString();
   for (const item of items) {
+    const project = item.project
+      ? projects.value.find((p) => normKey(p.title) === normKey(item.project ?? ""))
+      : undefined;
     await todoRepo.add({
       id: newId(),
       title: item.title,
@@ -171,6 +206,9 @@ async function addTodos(items: ProposedTodo[]) {
       sourceDate,
       createdAt,
       when: "later",
+      priority: item.priority,
+      due: item.due,
+      projectId: project?.id,
     });
   }
   todos.value = await todoRepo.list();
@@ -240,14 +278,50 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
   if (mode === "morning" || mode === "evening") activeSession.value = mode;
   const history = chat.value.messages;
   try {
+    let userMsg: ChatMessage | null = null;
     if (!opts?.silent) {
-      await appendMessage({
+      userMsg = {
         id: newId(),
         role: "user",
         content: userText,
         createdAt: new Date().toISOString(),
         mode,
+      };
+      await appendMessage(userMsg);
+    }
+    if (userMsg) {
+      const parseResult = await parseInput({
+        text: userText,
+        date: date.value,
+        todos: todos.value,
+        projects: projects.value,
+        model: settings.value.model,
+        complete,
       });
+      const routed = await routeParseResult(parseResult, { date: date.value, messageId: userMsg.id }, routeDeps);
+      await refreshState();
+      if (routed.proposedTasks.length > 0) {
+        const accepted = await onPropose(routed.proposedTasks, "later");
+        if (accepted.length > 0) {
+          await addTodos(accepted);
+          debugLog.push({ event: "todo_confirmed", tool: "parse", detail: accepted.map((a) => a.title).join("、") });
+        } else {
+          debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
+        }
+      }
+      if (routed.memoryCandidates.length > 0) {
+        pendingMemoryCandidates = routed.memoryCandidates;
+        const accepted = await onPropose(
+          routed.memoryCandidates.map((m) => ({ title: m.text, tag: MEMORY_KIND_LABEL[m.kind] })),
+          "memory",
+        );
+        for (const a of accepted) {
+          const m = pendingMemoryCandidates.find((x) => x.text === a.title);
+          if (m) await memoryRepo.add({ id: newId(), text: m.text, kind: m.kind, createdAt: new Date().toISOString() });
+        }
+        pendingMemoryCandidates = [];
+        await refreshState();
+      }
     }
     const yesterdayLog = await logRepo.get(shiftLocalDate(date.value, -1));
     const { assistantText } = await runAgent({
@@ -258,6 +332,9 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       model: settings.value.model,
       planConfirmed: !!chat.value.planConfirmedAt,
       yesterdayLog,
+      projects: projects.value,
+      waitings: waitings.value,
+      memories: memories.value,
     });
     if (closedThisTurn) return;
     await appendMessage({
