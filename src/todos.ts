@@ -135,32 +135,51 @@ export function applyFullPlan(
   return next;
 }
 
-// 拖拽落点：把 id 插进 to.when 桶的第 to.index 位（index 针对不含自身的序列），
-// 重写涉及桶的 order 为 0..n-1。找不到 id 时原样返回。
+// 拖拽落点：when=today 插进今天桶第 index 位；when=later 插进 projectId 组分区第 index 位
+// （null = 未分组区，缺省 = 留在原组）。重写涉及序列的 order 为 0..n-1。找不到 id 时原样返回。
 export function applyMove(
   existing: Todo[],
   id: string,
-  to: { when: "today" | "later"; index: number },
+  to: { when: "today" | "later"; index: number; projectId?: string | null },
   date: string,
 ): Todo[] {
   const moved = existing.find((t) => t.id === id);
   if (!moved) return existing;
-  const from = todoWhen(moved);
   const { today, later } = partitionTodos(existing, date);
-  const target = (to.when === "today" ? today : later).filter((t) => t.id !== id);
+  const toProject =
+    to.when === "later" ? (to.projectId === undefined ? (moved.projectId ?? null) : to.projectId) : null;
+  const fromKey = todoWhen(moved) === "today" ? "today" : `later:${moved.projectId ?? ""}`;
+  const toKey = to.when === "today" ? "today" : `later:${toProject ?? ""}`;
+
+  const inLane = (t: Todo, when: "today" | "later", projectId: string | null): boolean =>
+    when === "today"
+      ? todoWhen(t) === "today"
+      : todoWhen(t) === "later" && (t.projectId ?? null) === projectId;
+
+  const pool = to.when === "today" ? today : later;
+  const target = pool.filter((t) => t.id !== id && inLane(t, to.when, toProject));
   const index = Math.max(0, Math.min(to.index, target.length));
   target.splice(index, 0, moved);
   const reordered = new Map<string, number>();
   target.forEach((t, i) => reordered.set(t.id, i));
-  if (from !== to.when) {
-    const source = (from === "today" ? today : later).filter((t) => t.id !== id);
+  if (fromKey !== toKey) {
+    const sourcePool = fromKey === "today" ? today : later;
+    const source = sourcePool.filter(
+      (t) => t.id !== id && inLane(t, fromKey === "today" ? "today" : "later", moved.projectId ?? null),
+    );
     source.forEach((t, i) => reordered.set(t.id, i));
   }
   return existing.map((t) => {
     const order = reordered.get(t.id);
     if (order === undefined) return t;
     const nextRow: Todo = { ...t, order };
-    if (t.id === id) nextRow.when = to.when;
+    if (t.id === id) {
+      nextRow.when = to.when;
+      if (to.when === "later") {
+        if (toProject) nextRow.projectId = toProject;
+        else delete nextRow.projectId;
+      }
+    }
     return nextRow;
   });
 }

@@ -214,3 +214,58 @@ describe("applyFullPlan", () => {
     expect(next.filter((t) => t.title === "支付宝")).toHaveLength(1);
   });
 });
+
+describe("applyMove 带目标组", () => {
+  const base: Todo[] = [
+    { id: "a1", title: "a1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "a2", title: "a2", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T02:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "b1", title: "b1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T03:00:00.000Z", when: "later", projectId: "p2" },
+    { id: "u1", title: "u1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T04:00:00.000Z", when: "later" },
+    { id: "t1", title: "t1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T05:00:00.000Z", when: "today", projectId: "p1" },
+  ];
+  const date = "2026-09-06";
+
+  it("移入别的组：改 projectId，两个组的 order 都重写", () => {
+    const next = applyMove(base, "b1", { when: "later", index: 1, projectId: "p1" }, date);
+    const b1 = next.find((t) => t.id === "b1")!;
+    expect(b1.projectId).toBe("p1");
+    expect(next.find((t) => t.id === "a1")?.order).toBe(0);
+    expect(b1.order).toBe(1);
+    expect(next.find((t) => t.id === "a2")?.order).toBe(2);
+    // u1 不在涉及序列里，拿不到 order
+    expect(next.find((t) => t.id === "u1")?.order).toBeUndefined();
+  });
+
+  it("projectId 为 null 移入未分组区：删掉 projectId 字段", () => {
+    const next = applyMove(base, "a1", { when: "later", index: 0, projectId: null }, date);
+    const a1 = next.find((t) => t.id === "a1")!;
+    expect("projectId" in a1).toBe(false);
+    expect(a1.when).toBe("later");
+  });
+
+  it("projectId 缺省 = 留在原组，只做组内排序", () => {
+    const next = applyMove(base, "a1", { when: "later", index: 1 }, date);
+    const a1 = next.find((t) => t.id === "a1")!;
+    expect(a1.projectId).toBe("p1");
+    expect(next.find((t) => t.id === "a2")?.order).toBe(0);
+    expect(a1.order).toBe(1);
+    // 别组不受影响
+    expect(next.find((t) => t.id === "b1")?.order).toBeUndefined();
+  });
+
+  it("从今天拖进以后的指定组", () => {
+    const next = applyMove(base, "t1", { when: "later", index: 0, projectId: "p2" }, date);
+    const t1 = next.find((t) => t.id === "t1")!;
+    expect(t1.when).toBe("later");
+    expect(t1.projectId).toBe("p2");
+    expect(t1.order).toBe(0);
+    expect(next.find((t) => t.id === "b1")?.order).toBe(1);
+  });
+
+  it("从以后拖回今天：保留 projectId", () => {
+    const next = applyMove(base, "a1", { when: "today", index: 1 }, date);
+    const a1 = next.find((t) => t.id === "a1")!;
+    expect(a1.when).toBe("today");
+    expect(a1.projectId).toBe("p1");
+  });
+});
