@@ -58,7 +58,7 @@ src/
     db.ts              IndexedDB 仓储（DB v2）：chatRepo / todoRepo / logRepo / eventRepo / projectRepo / waitingRepo（memories store 仅占位，功能已下线）
     settings.ts        设置读写 + effectiveApiKey
   screens/             ChatScreen / TodoScreen / DiaryScreen / SettingsScreen（.vue）
-  components/          DebugPanel / RitualBar / TodoConfirm / TodoRow（.vue）
+  components/          DebugPanel / RitualBar / TodoConfirm / TodoRow / GroupSheet（.vue）
   debug/
     log.ts             屏幕可见的调试日志（debugLog），不写完整 API Key
     default-key.ts     内置默认调试 Key（被 .gitignore 忽略），见「安全注意事项」
@@ -66,7 +66,7 @@ src/
   __tests__/           全部 vitest 用例 + setup.ts
   其余顶层模块          dates / ritual / todos / todos-filter / chat-session / diary /
                        ids / keys / keyboard-inset / todo-drag / build-info / rich-text /
-                       norm（归一化）/ todo-meta（徽标文案）
+                       norm（归一化）/ todo-meta（徽标文案）/ todo-groups（以后栏分区）
                        （纯函数小工具，均有对应测试）
 docs/superpowers/      specs/（设计）与 plans/（实现计划）
 eval/                  解析语料 eval（真实 API，`npm run eval:parse`，不进 npm test）
@@ -82,7 +82,7 @@ dist/                  构建产物（cap sync 的 webDir）
 - **每条非 silent 输入先过解析层**（`parse.ts` 的 `parseInput`，独立一次模型调用，只输出 JSON），`route-parse.ts` 把产出分流：events/decisions/projects/waitings 自动落库；**tasks 必须弹确认框，用户确认后才落库**（确认框在 `App.vue` 的 `onPropose`，kind 为 later/today）。解析失败只记 debug（`parse_fail`），对话照常。
 - **回复循环不抽取。** loop 工具只有 `list_todos` / `set_today_plan`（`propose_todos` / `suggest_order` 已移除，见 `src/__tests__/loop.test.ts`）；回复上下文由 `context.ts` 组装：项目/等待摘要 + 按本轮 ParseResult 动态选取的近期事件（`selectRelevantEvents`，纯闲聊不注入）+ 历史截断最近 12 条（`HISTORY_LIMIT`）。循环上限 `MAX_MODEL_CALLS = 4`。
 - **没有"帮你勾掉"的工具。** 勾选只发生在待办页；`write_daily_log` 这类工具已被有意移除（见 `src/__tests__/loop.test.ts` 的对应用例）。
-- 待办分两桶：`when: "today" | "later"`；字段缺失视为 today（兼容旧数据）。分桶与快照逻辑集中在 `src/todos.ts`（`partitionTodos` / `applyTodayPlan` / `applyFullPlan`），标题去重忽略空白与大小写（统一入口 `src/norm.ts` 的 `normKey`）。桶内手动顺序存 `Todo.order`（缺失按 `createdAt` 兜底），拖拽落点用 `applyMove` 一次性重写涉及桶的 order，仓储入口是 `todoRepo.move`。结构化字段 `priority` / `due` / `projectId` 由解析层填充，展示徽标用 `src/todo-meta.ts` 的 `todoMeta`。
+- 待办分两桶：`when: "today" | "later"`；字段缺失视为 today（兼容旧数据）。分桶与快照逻辑集中在 `src/todos.ts`（`partitionTodos` / `applyTodayPlan` / `applyFullPlan`），标题去重忽略空白与大小写（统一入口 `src/norm.ts` 的 `normKey`）。桶内手动顺序存 `Todo.order`（缺失按 `createdAt` 兜底），拖拽落点用 `applyMove` 一次性重写涉及桶的 order，仓储入口是 `todoRepo.move`。结构化字段 `priority` / `due` / `projectId` 由解析层填充，展示徽标用 `src/todo-meta.ts` 的 `todoMeta`。「以后」栏按项目分区展示（组 = 复用 `Project`，非真层级）：分区/进度/自动完成/组排序的纯函数在 `src/todo-groups.ts`（`partitionLater` / `syncProjectStatuses` / `applyProjectMove`），`applyMove` 的落点支持带 `projectId`（跨组拖拽即改归属）；组内最后一条勾掉组自动 done、来新任务自动回 active（`App.vue` 的 `syncProjects` 在所有任务变更点调用）。
 - 一天按**本地日历日**（`src/dates.ts` 的 `localDate`）划分，不要用 UTC 日期。朝/暮由 `daySplitHour`（默认 12）切分，见 `src/ritual.ts`。
 - 确认今日计划后会关闭当前对话段（`chatRepo.closeSession`），旧消息进 `DayChat.archive`，日记仍读归档。
 - 昨日日记每轮注入对话上下文（`runTurn` 里 `logRepo.get(昨天)` → `runAgent` 的 `yesterdayLog`）；当天对话完全空白时（`chat-session.ts` 的 `shouldGreet`）Agent 主动开场一次：kickoff 文案 `KICKOFF_TEXT` 只进 API 调用，不落用户气泡（`runTurn` 的 `silent` 选项，silent 轮跳过解析）。
@@ -104,7 +104,7 @@ dist/                  构建产物（cap sync 的 webDir）
 - 测试里通过注入假的 `complete` / `postJson` / `now` 来驱动，不打真实网络。App 级用例 mock `chatCompletions` 时注意：其参数是 `{ apiKey, request, postJson }` 包装，解析调用（`tools: []`）与回复调用（带工具）按此区分；`beforeEach` 垫一条消息可避免主动开场抢 `awaiting`。
 - 新增或修改业务规则时，同步更新对应测试；UI 变更优先考虑屏幕级测试（如 `chat-screen.test.ts`、`todos-screen.test.ts`）。
 - 解析判断的稳定性由语料保证：`src/agent/parse-corpus.ts` 是基准，`parse-corpus.test.ts` 验完整性（进 `npm run test`），`eval/parse.eval.test.ts` 用真实 API 打分（人工跑）。
-- 当前基线：36 个测试文件、160 个用例全部通过（`npm run test`）。
+- 当前基线：41 个测试文件、199 个用例全部通过（`npm run test`，2026-09-06 核实）。
 
 ## 安全注意事项
 

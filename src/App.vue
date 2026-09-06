@@ -100,6 +100,7 @@ import { normKey } from "@/norm";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
 import { chatRepo, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
 import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
+import { syncProjectStatuses } from "@/todo-groups";
 import {
   DEFAULT_MODEL,
   type ChatMessage,
@@ -180,6 +181,17 @@ async function refreshState() {
   waitings.value = await waitingRepo.listOpen();
 }
 
+// 组状态随任务自动流转：最后一条勾掉 → done；来了新活 → active。
+async function syncProjects() {
+  const all = await todoRepo.list();
+  const nowIso = new Date().toISOString();
+  const next = syncProjectStatuses(projects.value, all, nowIso);
+  for (let i = 0; i < next.length; i++) {
+    if (next[i] !== projects.value[i]) await projectRepo.put(next[i]);
+  }
+  await refreshState();
+}
+
 const routeDeps: RouteDeps = {
   addEvent: (e) => eventRepo.add(e),
   upsertProject: (title, patch) => projectRepo.upsertByTitle(title, patch).then(() => undefined),
@@ -211,6 +223,7 @@ async function addTodos(items: ProposedTodo[]) {
     });
   }
   todos.value = await todoRepo.list();
+  await syncProjects();
 }
 
 function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
@@ -492,18 +505,21 @@ async function onToggle(id: string) {
   await ready;
   await todoRepo.toggle(id);
   todos.value = await todoRepo.list();
+  await syncProjects();
 }
 
 async function onRemove(id: string) {
   await ready;
   await todoRepo.remove(id);
   todos.value = await todoRepo.list();
+  await syncProjects();
 }
 
 async function onMove(id: string, when: "today" | "later", index: number, projectId?: string | null) {
   await ready;
   await todoRepo.move(id, when, index, { projectId });
   todos.value = await todoRepo.list();
+  await syncProjects();
 }
 
 async function onMoveGroup(id: string, index: number) {
@@ -523,6 +539,7 @@ async function onAssignGroup(id: string, projectId: string | null, newTitle?: st
   todos.value = await todoRepo.list();
   // 新建组后 projects 也得刷新，否则 partitionLater 认不出新组，任务落进未分组区
   await refreshState();
+  await syncProjects();
 }
 
 async function onRenameGroup(id: string, title: string) {
