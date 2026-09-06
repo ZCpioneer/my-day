@@ -3,12 +3,11 @@ import { runAgent, MAX_MODEL_CALLS } from "@/agent/loop";
 import type { AgentDeps } from "@/agent/loop";
 import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
 import { debugLog } from "@/debug/log";
-import type { ProposedTodo, Todo } from "@/types";
+import type { Todo } from "@/types";
 
 function deps(over: Partial<AgentDeps> & { complete: AgentDeps["complete"] }): AgentDeps {
   return {
     listTodos: async () => [],
-    addTodos: async () => {},
     setTodayPlan: async () => {},
     now: () => new Date(2026, 8, 5, 8, 0, 0),
     onPropose: async (items) => items,
@@ -26,11 +25,11 @@ describe("runAgent", () => {
     expect(r.stopped).toBe(false);
   });
 
-  it("does not write todos until onPropose returns them", async () => {
-    const added: string[] = [];
+  it("propose_todos 已移除：调用返回未知工具", async () => {
+    debugLog.clear();
     let calls = 0;
     const d = deps({
-      complete: async (req: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+      complete: async (): Promise<ChatCompletionResponse> => {
         calls += 1;
         if (calls === 1) {
           return {
@@ -39,24 +38,18 @@ describe("runAgent", () => {
               {
                 id: "c1",
                 type: "function",
-                function: {
-                  name: "propose_todos",
-                  arguments: JSON.stringify({ items: [{ title: "给房东转水电费" }] }),
-                },
+                function: { name: "propose_todos", arguments: JSON.stringify({ items: [{ title: "给房东转水电费" }] }) },
               },
             ],
           };
         }
-        return { content: "已记下要加的。", tool_calls: [] };
-      },
-      onPropose: async () => [] as ProposedTodo[],
-      addTodos: async (items) => {
-        added.push(...items.map((i) => i.title));
+        return { content: "好。", tool_calls: [] };
       },
     });
     const r = await runAgent({ deps: d, mode: "chat", userText: "还要给房东转水电费", history: [], model: "deepseek-v4-flash" });
-    expect(added).toEqual([]);
-    expect(r.assistantText.length).toBeGreaterThan(0);
+    const result = debugLog.entries.find((e) => e.event === "tool_result" && e.tool === "propose_todos");
+    expect(result?.detail).toBe("未知工具");
+    expect(r.assistantText).toBe("好。");
   });
 
   it("stops after MAX_MODEL_CALLS", async () => {

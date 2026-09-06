@@ -92,7 +92,7 @@ const props = defineProps<{
   messages: ChatMessage[];
   awaiting: boolean;
   pendingPropose: ProposedTodo[] | null;
-  proposeKind?: "later" | "today";
+  proposeKind?: "later" | "today" | "memory";
 }>();
 
 const emit = defineEmits<{

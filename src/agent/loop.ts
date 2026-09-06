@@ -1,7 +1,7 @@
 import type { ApiMessage, ChatCompletionRequest, ChatCompletionResponse, ToolCall } from "@/api/deepseek";
 import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
-import { filterProposedTodos, filterTodayPlanItems } from "@/todos-filter";
+import { filterTodayPlanItems } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
 import type { ChatMessage, ChatMode, DailyLog, ProposedTodo, Todo } from "@/types";
 import { buildContextMessages } from "./context";
@@ -13,10 +13,9 @@ export const MAX_MODEL_CALLS = 4;
 export interface AgentDeps {
   complete: (req: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
   listTodos: () => Promise<Todo[]>;
-  addTodos: (items: ProposedTodo[]) => Promise<void>;
   setTodayPlan: (items: ProposedTodo[]) => Promise<void>;
   now: () => Date;
-  onPropose: (items: ProposedTodo[], kind: "later" | "today") => Promise<ProposedTodo[]>;
+  onPropose: (items: ProposedTodo[], kind: "later" | "today" | "memory") => Promise<ProposedTodo[]>;
 }
 
 function formatTimeLabel(now: Date): string {
@@ -33,10 +32,6 @@ function parseJson(raw: string): unknown | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isStringArray(v: unknown): v is string[] {
-  return Array.isArray(v) && v.every((x) => typeof x === "string");
 }
 
 function asProposedItems(raw: unknown): ProposedTodo[] | undefined {
@@ -74,28 +69,6 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
     return formatTodos(todos, localDate(deps.now()));
   }
 
-  if (name === "propose_todos") {
-    const items = asProposedItems(parsed);
-    if (!items) return "参数无效";
-    const existing = await deps.listTodos();
-    const valid = filterProposedTodos(items, existing);
-    if (valid.length === 0) return "没有可新增的任务";
-    debugLog.push({
-      event: "propose_ui",
-      tool: "propose_todos",
-      detail: valid.map((v) => v.title).join("、"),
-    });
-    const accepted = await deps.onPropose(valid, "later");
-    if (accepted.length === 0) {
-      debugLog.push({ event: "todo_rejected", tool: "propose_todos", detail: "用户这次不加" });
-      return "用户这次不加";
-    }
-    await deps.addTodos(accepted.map((a) => ({ ...a, when: "later" })));
-    const titles = accepted.map((a) => a.title).join("、");
-    debugLog.push({ event: "todo_confirmed", tool: "propose_todos", detail: titles });
-    return `用户已记到以后：${titles}`;
-  }
-
   if (name === "set_today_plan") {
     const items = asProposedItems(parsed);
     if (!items) return "参数无效";
@@ -115,13 +88,6 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
     const titles = accepted.map((a) => a.title).join("、");
     debugLog.push({ event: "todo_confirmed", tool: "set_today_plan", detail: titles });
     return `用户已确认今日计划：${titles}`;
-  }
-
-  if (name === "suggest_order") {
-    if (!parsed || typeof parsed !== "object") return "参数无效";
-    const order = (parsed as { order?: unknown }).order;
-    if (!isStringArray(order)) return "参数无效";
-    return `已记下建议顺序：${order.join("、")}`;
   }
 
   return "未知工具";

@@ -116,7 +116,7 @@ const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
-const proposeKind = ref<"later" | "today">("later");
+const proposeKind = ref<"later" | "today" | "memory">("later");
 const awaiting = ref(false);
 const composingDiary = ref(false);
 const catchUpNote = ref("");
@@ -176,7 +176,7 @@ async function addTodos(items: ProposedTodo[]) {
   todos.value = await todoRepo.list();
 }
 
-function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
+function onPropose(items: ProposedTodo[], kind: "later" | "today" | "memory"): Promise<ProposedTodo[]> {
   proposeKind.value = kind;
   pendingPropose.value = items;
   return new Promise((resolve) => {
@@ -205,7 +205,6 @@ async function applyAcceptedPlan(items: ProposedTodo[]) {
 const agentDeps: AgentDeps = {
   complete,
   listTodos: () => todoRepo.list(),
-  addTodos,
   setTodayPlan,
   now: () => new Date(),
   onPropose,
