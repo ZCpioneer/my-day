@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "eval:parse": "vitest run --config vitest.eval.config.ts",
     "cap:sync": "npm run build && npx cap sync android"
   },
   "dependencies": {
