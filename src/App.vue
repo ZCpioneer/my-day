@@ -43,7 +43,7 @@
         :composing="composingDiary"
         @compose="onComposeDiary"
       />
-      <SettingsScreen v-else :settings="settings" :memories="memories" @save="onSaveSettings" />
+      <SettingsScreen v-else :settings="settings" :memories="memories" @save="onSaveSettings" @remove-memory="onRemoveMemory" />
     </div>
     <div class="dock-wrap">
       <nav class="dock">
@@ -528,5 +528,11 @@ async function onSaveSettings(next: Settings) {
   await saveSettings(saved);
   settings.value = saved;
   if (!awaiting.value) activeSession.value = ritualForNow(new Date(), saved.daySplitHour);
+}
+
+async function onRemoveMemory(id: string) {
+  await ready;
+  await memoryRepo.remove(id);
+  memories.value = await memoryRepo.list();
 }
 </script>
