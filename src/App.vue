@@ -37,6 +37,9 @@
         @remove="onRemove"
         @move="onMove"
         @move-group="onMoveGroup"
+        @assign="onAssignGroup"
+        @rename-group="onRenameGroup"
+        @complete-group="onCompleteGroup"
       />
       <DiaryScreen
         v-else-if="tab === 'diary'"
@@ -506,6 +509,33 @@ async function onMove(id: string, when: "today" | "later", index: number, projec
 async function onMoveGroup(id: string, index: number) {
   await ready;
   await projectRepo.move(id, index);
+  await refreshState();
+}
+
+async function onAssignGroup(id: string, projectId: string | null, newTitle?: string) {
+  await ready;
+  let pid = projectId;
+  if (newTitle) {
+    const p = await projectRepo.upsertByTitle(newTitle, {});
+    pid = p.id;
+  }
+  await todoRepo.setProject(id, pid);
+  todos.value = await todoRepo.list();
+}
+
+async function onRenameGroup(id: string, title: string) {
+  await ready;
+  const p = projects.value.find((x) => x.id === id);
+  if (!p) return;
+  await projectRepo.put({ ...p, title, updatedAt: new Date().toISOString() });
+  await refreshState();
+}
+
+async function onCompleteGroup(id: string, done: boolean) {
+  await ready;
+  const p = projects.value.find((x) => x.id === id);
+  if (!p) return;
+  await projectRepo.put({ ...p, status: done ? "done" : "active", updatedAt: new Date().toISOString() });
   await refreshState();
 }
 

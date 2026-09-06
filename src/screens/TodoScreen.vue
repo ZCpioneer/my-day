@@ -27,6 +27,7 @@
           @lift="onLift"
           @drag="onDrag"
           @drop="onDrop"
+          @group="onRowGroup"
         />
         <p v-if="today.length === 0" class="empty" style="margin: 8px 0">还没定今天做哪几件。</p>
       </div>
@@ -61,6 +62,13 @@
             <span v-if="section.project" class="group-progress">
               {{ section.doneCount }}/{{ section.totalCount }}
             </span>
+            <button
+              v-if="section.project"
+              class="group-menu"
+              data-group-menu
+              type="button"
+              @click.stop="onGroupMenu(section)"
+            >···</button>
             <span class="group-arrow">{{ isCollapsed(section) ? "▸" : "▾" }}</span>
           </div>
           <template v-if="!isCollapsed(section)">
@@ -77,6 +85,7 @@
               @lift="onLift"
               @drag="onDrag"
               @drop="onDrop"
+              @group="onRowGroup"
             />
           </template>
         </div>
@@ -94,6 +103,7 @@
           @toggle="emit('toggle', $event)"
           @remove="emit('remove', $event)"
           @reveal="openId = $event"
+          @group="onRowGroup"
         />
         <p v-if="doneToday.length === 0" class="empty" style="margin: 8px 0">还没勾过。</p>
       </div>
@@ -105,11 +115,24 @@
     >
       {{ ghost.title }}
     </div>
+    <GroupSheet
+      v-if="sheet"
+      :mode="sheet.mode"
+      :projects="projects ?? []"
+      :current="sheetCurrent"
+      :group="sheetGroup"
+      :open-count="sheetOpenCount"
+      @pick="onSheetPick"
+      @rename="onSheetRename"
+      @complete="onSheetComplete"
+      @close="sheet = null"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import GroupSheet from "@/components/GroupSheet.vue";
 import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
 import { edgeScrollDelta, HOLD_MS, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
@@ -124,11 +147,61 @@ const emit = defineEmits<{
   remove: [id: string];
   move: [id: string, when: PlanBucket, index: number, projectId?: string | null];
   moveGroup: [id: string, index: number];
+  assign: [todoId: string, projectId: string | null, newTitle?: string];
+  renameGroup: [id: string, title: string];
+  completeGroup: [id: string, done: boolean];
 }>();
 
 const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
 
 const openId = ref<string | null>(null);
+const sheet = ref<{ mode: "assign"; todoId: string } | { mode: "manage"; project: Project } | null>(null);
+
+function openCountOf(pid: string): number {
+  return props.todos.filter((t) => t.projectId === pid && t.status === "open").length;
+}
+
+// 模板里收窄不了 sheet 的联合类型，派生值统一在这里算好。
+const sheetCurrent = computed(() => {
+  const s = sheet.value;
+  if (s?.mode !== "assign") return undefined;
+  return props.todos.find((t) => t.id === s.todoId)?.projectId ?? null;
+});
+const sheetGroup = computed(() => {
+  const s = sheet.value;
+  return s?.mode === "manage" ? s.project : undefined;
+});
+const sheetOpenCount = computed(() => {
+  const s = sheet.value;
+  return s?.mode === "manage" ? openCountOf(s.project.id) : undefined;
+});
+
+function onGroupMenu(s: LaterSection) {
+  if (s.project) sheet.value = { mode: "manage", project: s.project };
+}
+
+function onRowGroup(id: string) {
+  openId.value = null;
+  sheet.value = { mode: "assign", todoId: id };
+}
+
+function onSheetPick(projectId: string | null, newTitle?: string) {
+  const s = sheet.value;
+  sheet.value = null;
+  if (s?.mode === "assign") emit("assign", s.todoId, projectId, newTitle);
+}
+
+function onSheetRename(title: string) {
+  const s = sheet.value;
+  sheet.value = null;
+  if (s?.mode === "manage") emit("renameGroup", s.project.id, title);
+}
+
+function onSheetComplete(done: boolean) {
+  const s = sheet.value;
+  sheet.value = null;
+  if (s?.mode === "manage") emit("completeGroup", s.project.id, done);
+}
 const liftId = ref<string | null>(null);
 const insert = ref<{ bucket: PlanBucket; group: string | null; beforeId: string | null } | null>(null);
 const ghost = ref<{ title: string; top: number } | null>(null);

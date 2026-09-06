@@ -1,5 +1,6 @@
 <template>
   <div class="todo-swipe" :class="{ open: revealed, slot: lifted, holding }" :data-todo="todo.id">
+    <button class="todo-act" type="button" data-todo-group @click.stop="emit('group', todo.id)">分组</button>
     <button class="todo-del" type="button" data-todo-del @click.stop="emit('remove', todo.id)">删除</button>
     <div
       ref="itemEl"
@@ -29,8 +30,8 @@ import { HOLD_MS, movementCancelsHold } from "@/todo-drag";
 import { todoMeta } from "@/todo-meta";
 import type { Todo } from "@/types";
 
-const DELETE_W = 76;
-const OPEN_X = -DELETE_W;
+const BTN_W = 76;
+const OPEN_X = -BTN_W * 2;
 
 const props = defineProps<{
   todo: Todo;
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   lift: [id: string];
   drag: [id: string, clientY: number];
   drop: [id: string, clientY: number];
+  group: [id: string];
 }>();
 
 const x = ref(props.revealed ? OPEN_X : 0);

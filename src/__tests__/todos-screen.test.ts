@@ -315,3 +315,39 @@ describe("TodoScreen 组排序", () => {
     expect(w.find("[data-group=p1] [data-group-handle]").exists()).toBe(true);
   });
 });
+
+describe("TodoScreen 手动改组", () => {
+  it("revealed 区点「分组」打开浮层，选组后 emit assign", async () => {
+    localStorage.clear();
+    const todos: Todo[] = [
+      { id: "u1", title: "零散事", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", when: "later" },
+    ];
+    const projects: Project[] = [
+      { id: "p1", title: "搬家", status: "active", createdAt: "2026-09-06T01:00:00.000Z", updatedAt: "2026-09-06T01:00:00.000Z" },
+    ];
+    const w = mount(TodoScreen, { props: { todos, projects } });
+    await flushPromises();
+    const row = w.get("[data-todo=u1]");
+    await row.get(".item").trigger("pointerdown", { clientX: 200, clientY: 20, pointerId: 1 });
+    await row.get(".item").trigger("pointermove", { clientX: 110, clientY: 20, pointerId: 1 });
+    await row.get(".item").trigger("pointerup", { clientX: 110, clientY: 20, pointerId: 1 });
+    await row.get("[data-todo-group]").trigger("click");
+    await w.get("[data-pick=p1]").trigger("click");
+    expect(w.emitted("assign")?.[0]).toEqual(["u1", "p1", undefined]);
+  });
+
+  it("组头 ··· 打开管理浮层", async () => {
+    localStorage.clear();
+    const todos: Todo[] = [
+      { id: "a1", title: "a1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", when: "later", projectId: "p1" },
+    ];
+    const projects: Project[] = [
+      { id: "p1", title: "搬家", status: "active", createdAt: "2026-09-06T01:00:00.000Z", updatedAt: "2026-09-06T01:00:00.000Z" },
+    ];
+    const w = mount(TodoScreen, { props: { todos, projects } });
+    await flushPromises();
+    await w.get("[data-group=p1] [data-group-menu]").trigger("click");
+    expect(w.find(".sheet").exists()).toBe(true);
+    expect(w.text()).toContain("还有 1 件没做完");
+  });
+});
