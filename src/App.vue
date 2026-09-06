@@ -495,9 +495,9 @@ async function onRemove(id: string) {
   todos.value = await todoRepo.list();
 }
 
-async function onMove(id: string, when: "today" | "later", index: number) {
+async function onMove(id: string, when: "today" | "later", index: number, projectId?: string | null) {
   await ready;
-  await todoRepo.move(id, when, index);
+  await todoRepo.move(id, when, index, { projectId });
   todos.value = await todoRepo.list();
 }
 

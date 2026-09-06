@@ -30,11 +30,7 @@
         />
         <p v-if="today.length === 0" class="empty" style="margin: 8px 0">还没定今天做哪几件。</p>
       </div>
-      <div
-        class="todo-bucket"
-        data-bucket="later"
-        :class="{ 'drop-end': insert?.bucket === 'later' && insert.beforeId === null && !insert.group }"
-      >
+      <div class="todo-bucket" data-bucket="later">
         <div class="section-label">以后</div>
         <div
           v-for="section in laterSections"
@@ -46,8 +42,7 @@
             'drop-end':
               insert?.bucket === 'later' &&
               insert.beforeId === null &&
-              (insert.group ?? '') === (section.project?.id ?? '') &&
-              !!insert.group,
+              (insert.group ?? '') === (section.project?.id ?? ''),
           }"
         >
           <div
@@ -120,7 +115,7 @@ const props = defineProps<{ todos: Todo[]; projects?: Project[] }>();
 const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];
-  move: [id: string, when: PlanBucket, index: number];
+  move: [id: string, when: PlanBucket, index: number, projectId?: string | null];
 }>();
 
 const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
@@ -188,19 +183,45 @@ function ghostTop(clientY: number) {
   return clientY - origin;
 }
 
-// 量出桶内各行的纵向中点，算出手指落在第几个空位（不含被拖的行）。
+// 量出落点：今天桶照旧按全桶行算；以后栏先命中分区（data-group），
+// 落空处回被拖行自己的组（无组 = 未分组区），index 越界交给 applyMove 夹紧。
 function measureInsert(bucket: PlanBucket, clientY: number, dragId: string) {
   const box = scrollEl.value?.querySelector(`[data-bucket=${bucket}]`);
-  const rows = box
-    ? [...box.querySelectorAll<HTMLElement>("[data-todo]")].filter((el) => el.dataset.todo !== dragId)
-    : [];
+  if (bucket === "today") {
+    const rows = box
+      ? [...box.querySelectorAll<HTMLElement>("[data-todo]")].filter((el) => el.dataset.todo !== dragId)
+      : [];
+    const midpoints = rows.map((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+    const index = insertIndex(clientY, midpoints);
+    return { bucket, group: null, index, beforeId: rows[index]?.dataset.todo ?? null };
+  }
+  const groups = box ? [...box.querySelectorAll<HTMLElement>("[data-group]")] : [];
+  const hit = groups.find((el) => {
+    const rect = el.getBoundingClientRect();
+    return clientY >= rect.top && clientY < rect.bottom;
+  });
+  if (!hit) {
+    const dragged = props.todos.find((t) => t.id === dragId);
+    return {
+      bucket,
+      group: dragged?.projectId ?? null,
+      index: Number.MAX_SAFE_INTEGER,
+      beforeId: null,
+    };
+  }
+  const group = hit.dataset.group || null;
+  const rows = [...hit.querySelectorAll<HTMLElement>("[data-todo]")].filter(
+    (el) => el.dataset.todo !== dragId,
+  );
   const midpoints = rows.map((el) => {
     const rect = el.getBoundingClientRect();
     return rect.top + rect.height / 2;
   });
   const index = insertIndex(clientY, midpoints);
-  // group 占位：以后栏分组命中逻辑在 Task 6 实现，这里先按未命中（null）返回。
-  return { bucket, index, group: null, beforeId: rows[index]?.dataset.todo ?? null };
+  return { bucket, group, index, beforeId: rows[index]?.dataset.todo ?? null };
 }
 
 function onLift(id: string) {
@@ -230,10 +251,20 @@ function onDrop(id: string, clientY: number) {
   insert.value = null;
   if (!row || !bucket || !target) return;
   const from = todoWhen(row);
-  if (bucket === from) {
-    const origin = buckets.value[from].findIndex((t) => t.id === id);
+  if (bucket === "today") {
+    if (from === "today") {
+      const origin = buckets.value.today.findIndex((t) => t.id === id);
+      if (origin < 0 || target.index === origin) return;
+    }
+    emit("move", id, "today", target.index);
+    return;
+  }
+  // 以后：同组同位置则不动
+  if (from === "later" && (row.projectId ?? null) === target.group) {
+    const lane = later.value.filter((t) => (t.projectId ?? null) === target.group);
+    const origin = lane.findIndex((t) => t.id === id);
     if (origin < 0 || target.index === origin) return;
   }
-  emit("move", id, bucket, target.index);
+  emit("move", id, "later", target.index, target.group);
 }
 </script>

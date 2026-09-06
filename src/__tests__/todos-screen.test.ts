@@ -91,6 +91,7 @@ describe("TodoScreen", () => {
     const w = mount(TodoScreen, { props: { todos } });
     mockRect(w.get("[data-bucket=today]").element as HTMLElement, 0, 120);
     mockRect(w.get("[data-bucket=later]").element as HTMLElement, 120, 300);
+    mockRect(w.get("[data-group='']").element as HTMLElement, 120, 300);
 
     const row = w.get("[data-todo=t1] .item");
     await row.trigger("pointerdown", { clientX: 40, clientY: 40, pointerId: 1 });
@@ -98,7 +99,7 @@ describe("TodoScreen", () => {
     await row.trigger("pointermove", { clientX: 40, clientY: 180, pointerId: 1 });
     await row.trigger("pointerup", { clientX: 40, clientY: 180, pointerId: 1 });
     // later 桶里已有 t2（未 mock 尺寸，中点为 0），落点在其下方 → 排到第 1 位
-    expect(w.emitted("move")?.[0]).toEqual(["t1", "later", 1]);
+    expect(w.emitted("move")?.[0]).toEqual(["t1", "later", 1, null]);
   });
 
   it("still emits move if the browser cancels the pointer mid-drag", async () => {
@@ -107,6 +108,7 @@ describe("TodoScreen", () => {
     const w = mount(TodoScreen, { props: { todos } });
     mockRect(w.get("[data-bucket=today]").element as HTMLElement, 0, 120);
     mockRect(w.get("[data-bucket=later]").element as HTMLElement, 120, 300);
+    mockRect(w.get("[data-group='']").element as HTMLElement, 120, 300);
 
     const row = w.get("[data-todo=t1] .item");
     await row.trigger("pointerdown", { clientX: 40, clientY: 40, pointerId: 1 });
@@ -115,7 +117,7 @@ describe("TodoScreen", () => {
     await row.trigger("pointercancel", { clientX: 40, clientY: 90, pointerId: 1 });
     await row.trigger("pointermove", { clientX: 40, clientY: 180, pointerId: 1 });
     await row.trigger("pointerup", { clientX: 40, clientY: 180, pointerId: 1 });
-    expect(w.emitted("move")?.[0]).toEqual(["t1", "later", 1]);
+    expect(w.emitted("move")?.[0]).toEqual(["t1", "later", 1, null]);
   });
 
   it("does not emit move when dropped back at its own spot", async () => {
@@ -200,5 +202,65 @@ describe("TodoScreen 项目分区", () => {
     const w2 = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
     await flushPromises();
     expect(w2.find("[data-group=p1] [data-todo=g1]").exists()).toBe(false);
+  });
+});
+
+describe("TodoScreen 跨组拖拽", () => {
+  // 与上面 TodoScreen describe 一样：fake timers 用后复原，否则会拖垮下一个用例的 beforeEach（IndexedDB）
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const crossTodos: Todo[] = [
+    { id: "a1", title: "a1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", when: "later", projectId: "p1" },
+    { id: "b1", title: "b1", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T02:00:00.000Z", when: "later", projectId: "p2" },
+  ];
+  const crossProjects: Project[] = [
+    { id: "p1", title: "甲", status: "active", createdAt: "2026-09-06T01:00:00.000Z", updatedAt: "2026-09-06T01:00:00.000Z" },
+    { id: "p2", title: "乙", status: "active", createdAt: "2026-09-06T02:00:00.000Z", updatedAt: "2026-09-06T02:00:00.000Z" },
+  ];
+
+  it("拖进别的组的分区：emit 带目标 projectId", async () => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    const w = mount(TodoScreen, { props: { todos: crossTodos, projects: crossProjects } });
+    await flushPromises();
+    mockRect(w.get("[data-bucket=today]").element as HTMLElement, 0, 50);
+    mockRect(w.get("[data-bucket=later]").element as HTMLElement, 50, 400);
+    mockRect(w.get("[data-group=p1]").element as HTMLElement, 50, 150);
+    mockRect(w.get("[data-group=p2]").element as HTMLElement, 150, 400);
+    mockRect(w.get("[data-todo=b1]").element as HTMLElement, 200, 260);
+
+    const row = w.get("[data-todo=a1] .item");
+    await row.trigger("pointerdown", { clientX: 40, clientY: 80, pointerId: 1 });
+    await vi.advanceTimersByTimeAsync(HOLD_MS);
+    // 落进 p2 分区、b1 中点（230）之上 → p2 组第 0 位
+    await row.trigger("pointermove", { clientX: 40, clientY: 180, pointerId: 1 });
+    await row.trigger("pointerup", { clientX: 40, clientY: 180, pointerId: 1 });
+    expect(w.emitted("move")?.[0]).toEqual(["a1", "later", 0, "p2"]);
+  });
+
+  it("落在以后栏空白处：回自己组排末尾", async () => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    const w = mount(TodoScreen, { props: { todos: crossTodos, projects: crossProjects } });
+    await flushPromises();
+    mockRect(w.get("[data-bucket=today]").element as HTMLElement, 0, 50);
+    mockRect(w.get("[data-bucket=later]").element as HTMLElement, 50, 600);
+    mockRect(w.get("[data-group=p1]").element as HTMLElement, 50, 150);
+    mockRect(w.get("[data-group=p2]").element as HTMLElement, 150, 300);
+
+    const row = w.get("[data-todo=a1] .item");
+    await row.trigger("pointerdown", { clientX: 40, clientY: 80, pointerId: 1 });
+    await vi.advanceTimersByTimeAsync(HOLD_MS);
+    // 两分区之下的空白（y=500 不在任何 data-group 内）
+    await row.trigger("pointermove", { clientX: 40, clientY: 500, pointerId: 1 });
+    await row.trigger("pointerup", { clientX: 40, clientY: 500, pointerId: 1 });
+    const args = w.emitted("move")?.[0];
+    expect(args?.[0]).toBe("a1");
+    expect(args?.[1]).toBe("later");
+    expect(args?.[3]).toBe("p1");
+    // index 越界由 applyMove 夹紧到组末尾
+    expect(typeof args?.[2]).toBe("number");
   });
 });
