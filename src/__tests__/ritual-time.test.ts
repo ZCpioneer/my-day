@@ -119,4 +119,26 @@ describe("buildContextMessages", () => {
     expect(blob).toContain("待办列表是唯一真相");
     expect(blob).toContain("整理今日待办");
   });
+
+  it("includes the whole current session, not only the last 16 turns", () => {
+    const messages: ChatMessage[] = Array.from({ length: 18 }, (_, i) => ({
+      id: `m${i}`,
+      role: "user" as const,
+      content: `第${i}句`,
+      createdAt: "2026-09-05T01:00:00.000Z",
+    }));
+    const out = buildContextMessages({
+      date: "2026-09-05",
+      timeLabel: "下午 15:00",
+      mode: "morning",
+      todayTodos: [],
+      laterTodos: [],
+      doneToday: [],
+      messages,
+      planConfirmed: false,
+    });
+    const blob = JSON.stringify(out);
+    expect(blob).toContain("第0句");
+    expect(blob).toContain("第17句");
+  });
 });

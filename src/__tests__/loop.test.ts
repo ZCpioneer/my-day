@@ -186,6 +186,38 @@ describe("runAgent", () => {
     expect(planned).toEqual(["支付宝"]);
   });
 
+  it("puts yesterday's diary into the context facts when provided", async () => {
+    let seen: ChatCompletionRequest | undefined;
+    const d = deps({
+      complete: async (req: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+        seen = req;
+        return { content: "早。", tool_calls: [] };
+      },
+    });
+    await runAgent({
+      deps: d,
+      mode: "morning",
+      userText: "开始今天",
+      history: [],
+      model: "deepseek-v4-flash",
+      yesterdayLog: {
+        date: "2026-09-04",
+        plan: "买显示器",
+        done: ["买显示器"],
+        undone: ["给房东转水电费"],
+        state: "还行",
+        updatedAt: "2026-09-04T13:00:00.000Z",
+      },
+    });
+    const facts =
+      seen?.messages
+        .filter((m) => m.role === "system")
+        .map((m) => m.content)
+        .join("\n") ?? "";
+    expect(facts).toContain("昨天的日记");
+    expect(facts).toContain("给房东转水电费");
+  });
+
   it("list_todos reports all open items and only todos completed today", async () => {
     debugLog.clear();
     let calls = 0;

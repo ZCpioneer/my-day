@@ -28,7 +28,13 @@
         @confirm="onConfirmPropose"
         @skip="onSkipPropose"
       />
-      <TodoScreen v-else-if="tab === 'todo'" :todos="todos" @toggle="onToggle" />
+      <TodoScreen
+        v-else-if="tab === 'todo'"
+        :todos="todos"
+        @toggle="onToggle"
+        @remove="onRemove"
+        @move="onMove"
+      />
       <DiaryScreen
         v-else-if="tab === 'diary'"
         :daily="daily"
@@ -68,15 +74,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { composeDailyLog } from "@/agent/compose-log";
+import { composePlan } from "@/agent/compose-plan";
 import { runAgent, type AgentDeps } from "@/agent/loop";
+import { KICKOFF_TEXT } from "@/agent/prompt";
 import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
 import ChatScreen from "@/screens/ChatScreen.vue";
 import TodoScreen from "@/screens/TodoScreen.vue";
 import DiaryScreen from "@/screens/DiaryScreen.vue";
 import SettingsScreen from "@/screens/SettingsScreen.vue";
+import { shouldGreet } from "@/chat-session";
 import { catchUpDiary } from "@/diary";
-import { localDate } from "@/dates";
+import { localDate, shiftLocalDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
@@ -115,6 +124,8 @@ const activeSession = ref<"morning" | "evening">(ritualForNow());
 let proposeResolve: ((v: ProposedTodo[]) => void) | null = null;
 let catchUpRunning = false;
 let dayTick: number | undefined;
+let closedThisTurn = false;
+let lastProposeSkipped = false;
 
 const dateLabel = computed(() => formatDateLabel(date.value));
 
@@ -134,7 +145,11 @@ const ready = (async () => {
   todos.value = await todoRepo.list();
   await loadDay(date.value);
 })();
-void ready.then(() => runCatchUp());
+void (async () => {
+  await ready;
+  await runCatchUp();
+  await maybeGreet();
+})();
 
 async function complete(req: ChatCompletionRequest) {
   const key = effectiveApiKey(settings.value);
@@ -171,7 +186,18 @@ function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<Prop
 
 async function setTodayPlan(items: ProposedTodo[]) {
   await todoRepo.applyTodayPlan(items.map((i) => i.title));
-  await chatRepo.setPlanConfirmed(date.value, new Date().toISOString());
+  await chatRepo.closeSession(date.value, new Date().toISOString());
+  chat.value = await chatRepo.get(date.value);
+  todos.value = await todoRepo.list();
+  closedThisTurn = true;
+}
+
+async function applyAcceptedPlan(items: ProposedTodo[]) {
+  await todoRepo.applyFullPlan({
+    today: items.filter((i) => i.when !== "later").map((i) => i.title),
+    later: items.filter((i) => i.when === "later").map((i) => i.title),
+  });
+  await chatRepo.closeSession(date.value, new Date().toISOString());
   chat.value = await chatRepo.get(date.value);
   todos.value = await todoRepo.list();
 }
@@ -193,10 +219,12 @@ function settlePropose(accepted: ProposedTodo[]) {
 }
 
 function onConfirmPropose(items: ProposedTodo[]) {
+  lastProposeSkipped = false;
   settlePropose(items);
 }
 
 function onSkipPropose() {
+  lastProposeSkipped = true;
   settlePropose([]);
 }
 
@@ -205,20 +233,24 @@ async function appendMessage(msg: ChatMessage) {
   chat.value = await chatRepo.get(date.value);
 }
 
-async function runTurn(mode: ChatMode, userText: string) {
+async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boolean }) {
   await ready;
   if (awaiting.value) return;
   awaiting.value = true;
+  closedThisTurn = false;
   if (mode === "morning" || mode === "evening") activeSession.value = mode;
   const history = chat.value.messages;
   try {
-    await appendMessage({
-      id: newId(),
-      role: "user",
-      content: userText,
-      createdAt: new Date().toISOString(),
-      mode,
-    });
+    if (!opts?.silent) {
+      await appendMessage({
+        id: newId(),
+        role: "user",
+        content: userText,
+        createdAt: new Date().toISOString(),
+        mode,
+      });
+    }
+    const yesterdayLog = await logRepo.get(shiftLocalDate(date.value, -1));
     const { assistantText } = await runAgent({
       deps: agentDeps,
       mode,
@@ -226,7 +258,9 @@ async function runTurn(mode: ChatMode, userText: string) {
       history,
       model: settings.value.model,
       planConfirmed: !!chat.value.planConfirmedAt,
+      yesterdayLog,
     });
+    if (closedThisTurn) return;
     await appendMessage({
       id: newId(),
       role: "assistant",
@@ -235,6 +269,7 @@ async function runTurn(mode: ChatMode, userText: string) {
       mode,
     });
   } catch (e) {
+    if (closedThisTurn) return;
     const userMessage = e instanceof ApiError ? e.userMessage : "模型这轮没回上，再说一次";
     if (!(e instanceof ApiError)) {
       debugLog.push({ event: "http_fail", detail: e instanceof Error ? e.message : String(e) });
@@ -252,8 +287,33 @@ async function runTurn(mode: ChatMode, userText: string) {
   }
 }
 
-function onTidy() {
-  void runTurn("morning", "自动整理。");
+async function onTidy() {
+  await ready;
+  if (awaiting.value || pendingPropose.value) return;
+  awaiting.value = true;
+  lastProposeSkipped = false;
+  try {
+    const plan = await composePlan({
+      date: date.value,
+      chat: chat.value,
+      todos: todos.value,
+      complete,
+      model: settings.value.model,
+    });
+    const accepted = await onPropose([...plan.today, ...plan.later], "today");
+    if (lastProposeSkipped) return;
+    await applyAcceptedPlan(accepted);
+  } catch (e) {
+    const userMessage = e instanceof ApiError ? e.userMessage : "待办这轮没整理成";
+    debugLog.push({
+      event: "http_fail",
+      detail: e instanceof Error ? e.message : String(e),
+    });
+    catchUpNote.value = userMessage;
+  } finally {
+    awaiting.value = false;
+    if (proposeResolve) settlePropose([]);
+  }
 }
 
 async function runCatchUp() {
@@ -282,6 +342,14 @@ async function runCatchUp() {
   } finally {
     catchUpRunning = false;
   }
+}
+
+async function maybeGreet() {
+  await ready;
+  if (awaiting.value || pendingPropose.value) return;
+  if (!effectiveApiKey(settings.value)) return;
+  if (!shouldGreet(chat.value)) return;
+  await runTurn(activeSession.value, KICKOFF_TEXT, { silent: true });
 }
 
 async function onComposeDiary() {
@@ -331,6 +399,7 @@ function onVisibilityChange() {
   void (async () => {
     await rollToTodayIfNeeded();
     await runCatchUp();
+    await maybeGreet();
   })();
 }
 
@@ -339,7 +408,10 @@ onMounted(() => {
   dayTick = window.setInterval(() => {
     void (async () => {
       const rolled = await rollToTodayIfNeeded();
-      if (rolled) await runCatchUp();
+      if (rolled) {
+        await runCatchUp();
+        await maybeGreet();
+      }
     })();
   }, 60_000);
 });
@@ -355,6 +427,18 @@ function onSend(text: string) {
 async function onToggle(id: string) {
   await ready;
   await todoRepo.toggle(id);
+  todos.value = await todoRepo.list();
+}
+
+async function onRemove(id: string) {
+  await ready;
+  await todoRepo.remove(id);
+  todos.value = await todoRepo.list();
+}
+
+async function onMove(id: string, when: "today" | "later", index: number) {
+  await ready;
+  await todoRepo.move(id, when, index);
   todos.value = await todoRepo.list();
 }
 

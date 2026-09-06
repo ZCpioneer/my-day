@@ -7,6 +7,7 @@ export const CATCH_UP_LOOKBACK_DAYS = 14;
 export function hasDiaryTraces(input: { chat: DayChat; todos: Todo[]; date: string }): boolean {
   if (input.chat.planConfirmedAt) return true;
   if (input.chat.messages.length > 0) return true;
+  if ((input.chat.archive?.length ?? 0) > 0) return true;
   return input.todos.some((t) => isDoneOn(t, input.date));
 }
 

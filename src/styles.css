@@ -12,6 +12,7 @@
   --line: rgba(239, 230, 212, 0.09);
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --kb: 0px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,6 +51,7 @@ body::before {
   height: 100%;
   border-radius: 30px;
   overflow: hidden;
+  padding-bottom: var(--kb, 0px);
   background:
     linear-gradient(180deg, rgba(224,177,90,0.07), transparent 22%),
     var(--ink-2);
@@ -164,6 +166,7 @@ body::before {
 }
 
 .screen {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -180,6 +183,7 @@ body::before {
   gap: 12px;
 }
 .thread::-webkit-scrollbar { width: 0; }
+.thread-end { height: 1px; flex: none; }
 
 .empty {
   margin: auto 8px;
@@ -206,6 +210,15 @@ body::before {
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.65;
+}
+.bubble p {
+  margin: 0;
+}
+.bubble p + p {
+  margin-top: 4px;
+}
+.bubble p.blank {
+  height: 10px;
 }
 .msg.agent .bubble {
   background: var(--panel);
@@ -251,6 +264,12 @@ body::before {
   color: var(--paper-dim);
   line-height: 1.65;
   padding: 0 4px 8px;
+}
+.propose-group {
+  font-size: 11px;
+  color: var(--dawn);
+  letter-spacing: 0.12em;
+  padding: 8px 4px 2px;
 }
 .todo-pick {
   display: flex;
@@ -368,6 +387,31 @@ body::before {
 .dock-wrap {
   padding: 6px 16px calc(10px + var(--safe-b));
 }
+html.kb-open .dock-wrap {
+  display: none;
+}
+
+html.native,
+html.native body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+html.native body {
+  padding: 0;
+  display: block;
+  min-height: 100%;
+}
+html.native #app {
+  width: 100%;
+  height: 100%;
+}
+html.native .phone {
+  border-radius: 0;
+  box-shadow: none;
+}
 .dock {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -404,6 +448,58 @@ body::before {
   justify-content: space-between;
   align-items: baseline;
 }
+.todo-head-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.todo-hint {
+  font-size: 11px;
+  color: var(--mute);
+  letter-spacing: 0.08em;
+}
+.todo-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 18px;
+}
+.todo-bucket > * {
+  flex-shrink: 0;
+}
+.todo-swipe.holding .item,
+.todo-swipe.slot .item {
+  touch-action: none;
+}
+/* 抬起后原行整个收起，列表即时靠拢；落点由插入线指示。 */
+.todo-swipe.slot {
+  display: none;
+}
+/* 落点指示：某行上方一条线，或桶尾一条线。 */
+.todo-swipe.drop-before {
+  box-shadow: 0 -3px 0 0 var(--dawn);
+}
+.todo-bucket.drop-end::after {
+  content: "";
+  height: 0;
+  border-top: 3px solid var(--dawn);
+  margin: -12px 4px 0;
+}
+.todo-ghost {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  left: 18px;
+  right: 18px;
+  transform: translateY(-50%) scale(1.03);
+  padding: 14px 12px;
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  font-size: 14px;
+  line-height: 1.5;
+}
 .todo-head h2, .diary-head h2 {
   font-family: "Noto Serif SC", serif;
   font-size: 22px;
@@ -412,7 +508,34 @@ body::before {
 }
 .count { color: var(--dawn); font-size: 13px; }
 
+.todo-scroll > * {
+  flex-shrink: 0;
+}
+.todo-swipe {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  flex: none;
+}
+.todo-del {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 76px;
+  border: 0;
+  background: var(--clay);
+  color: #1a1408;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.todo-del:active { filter: brightness(0.92); }
 .item {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: 12px;
   padding: 14px 12px;
@@ -421,7 +544,14 @@ body::before {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
   cursor: pointer;
   align-items: flex-start;
+  touch-action: pan-y;
+  user-select: none;
+  transition: transform 180ms var(--ease);
 }
+.todo-swipe .item {
+  border-radius: 0;
+}
+.item.dragging { transition: none; }
 .box {
   width: 20px;
   height: 20px;
@@ -439,7 +569,6 @@ body::before {
 }
 .item.done p { color: var(--mute); text-decoration: line-through; }
 .item p { font-size: 14px; line-height: 1.5; }
-.item .meta { font-size: 11px; color: var(--mute); margin-top: 4px; }
 .section-label {
   font-size: 11px;
   color: var(--mute);

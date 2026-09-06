@@ -1,33 +1,9 @@
 import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
+import { dayTranscript } from "@/chat-session";
 import { snapshotLogTitles } from "@/todos";
-import type { ChatMessage, DailyLog, DayChat, Todo } from "@/types";
+import type { DailyLog, DayChat, Todo } from "@/types";
+import { parseJsonObject } from "./parse-json";
 import { diaryPrompt } from "./prompt";
-
-function parseJsonObject(raw: string): unknown | undefined {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = (fenced ? fenced[1] : trimmed).trim();
-  const tryParse = (s: string) => {
-    try {
-      return JSON.parse(s) as unknown;
-    } catch {
-      return undefined;
-    }
-  };
-  const direct = tryParse(body);
-  if (direct && typeof direct === "object") return direct;
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start >= 0 && end > start) return tryParse(body.slice(start, end + 1));
-  return undefined;
-}
-
-function transcript(messages: ChatMessage[]): string {
-  if (messages.length === 0) return "（当天没有对话）";
-  return messages
-    .map((m) => `${m.role === "user" ? "我" : "朝暮"}：${m.content}`)
-    .join("\n");
-}
 
 export async function composeDailyLog(input: {
   date: string;
@@ -44,7 +20,7 @@ export async function composeDailyLog(input: {
     `做成了：${snap.done.length ? snap.done.join("；") : "无"}`,
     `没做完：${snap.undone.length ? snap.undone.join("；") : "无"}`,
     "对话：",
-    transcript(input.chat.messages),
+    dayTranscript(input.chat),
   ].join("\n");
 
   const res = await input.complete({

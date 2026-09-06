@@ -1,3 +1,7 @@
+import { closeVisibleSession } from "../chat-session";
+import { newId } from "../ids";
+import { applyFullPlan, applyMove, applyTodayPlan } from "../todos";
+import { localDate } from "../dates";
 import type { ChatMessage, DailyLog, DayChat, Todo } from "../types";
 
 const DB_NAME = "zhaomu";
@@ -59,10 +63,37 @@ export const chatRepo = {
     await txDone(tx);
     db.close();
   },
+  async setPlanConfirmed(date: string, at: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("chats", "readwrite");
+    const store = tx.objectStore("chats");
+    const current = await new Promise<DayChat>((resolve, reject) => {
+      const req = store.get(date);
+      req.onsuccess = () => resolve((req.result as DayChat) ?? { date, messages: [] });
+      req.onerror = () => reject(req.error);
+    });
+    current.planConfirmedAt = at;
+    store.put(current);
+    await txDone(tx);
+    db.close();
+  },
   async clear(date: string): Promise<void> {
     const db = await openDb();
     const tx = db.transaction("chats", "readwrite");
     tx.objectStore("chats").put({ date, messages: [] });
+    await txDone(tx);
+    db.close();
+  },
+  async closeSession(date: string, planConfirmedAt?: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("chats", "readwrite");
+    const store = tx.objectStore("chats");
+    const current = await new Promise<DayChat>((resolve, reject) => {
+      const req = store.get(date);
+      req.onsuccess = () => resolve((req.result as DayChat) ?? { date, messages: [] });
+      req.onerror = () => reject(req.error);
+    });
+    store.put(closeVisibleSession(current, planConfirmedAt));
     await txDone(tx);
     db.close();
   },
@@ -107,6 +138,57 @@ export const todoRepo = {
     await txDone(tx);
     db.close();
     return todo;
+  },
+  async remove(id: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    tx.objectStore("todos").delete(id);
+    await txDone(tx);
+    db.close();
+  },
+  async move(id: string, when: "today" | "later", index: number, now: Date = new Date()): Promise<void> {
+    const existing = await todoRepo.list();
+    const next = applyMove(existing, id, { when, index }, localDate(now));
+    if (next === existing) return;
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    const store = tx.objectStore("todos");
+    for (const todo of next) store.put(todo);
+    await txDone(tx);
+    db.close();
+  },
+  async applyTodayPlan(titles: string[], now: Date = new Date()): Promise<void> {
+    const date = localDate(now);
+    const existing = await todoRepo.list();
+    const next = applyTodayPlan(existing, titles, {
+      date,
+      nowIso: now.toISOString(),
+      newId,
+    });
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    const store = tx.objectStore("todos");
+    for (const todo of next) store.put(todo);
+    await txDone(tx);
+    db.close();
+  },
+  async applyFullPlan(
+    plan: { today: string[]; later: string[] },
+    now: Date = new Date(),
+  ): Promise<void> {
+    const date = localDate(now);
+    const existing = await todoRepo.list();
+    const next = applyFullPlan(existing, plan, {
+      date,
+      nowIso: now.toISOString(),
+      newId,
+    });
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    const store = tx.objectStore("todos");
+    for (const todo of next) store.put(todo);
+    await txDone(tx);
+    db.close();
   },
 };
 

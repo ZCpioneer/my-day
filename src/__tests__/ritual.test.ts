@@ -3,24 +3,24 @@ import { mount } from "@vue/test-utils";
 import App from "@/App.vue";
 
 describe("ritual visibility", () => {
-  it("shows 自动整理 only on chat tab", async () => {
+  it("shows 自动整理待办 only on chat tab", async () => {
     const w = mount(App);
-    expect(w.text()).toContain("自动整理");
+    expect(w.text()).toContain("自动整理待办");
     await w.get("[data-nav=todo]").trigger("click");
-    expect(w.text()).not.toContain("自动整理");
+    expect(w.text()).not.toContain("自动整理待办");
     await w.get("[data-nav=chat]").trigger("click");
-    expect(w.text()).toContain("自动整理");
+    expect(w.text()).toContain("自动整理待办");
   });
 
-  it("shows 整理成日记 on the diary tab and keeps 自动整理 on chat", async () => {
+  it("shows 整理成日记 on the diary tab and keeps 自动整理待办 on chat", async () => {
     const w = mount(App);
-    expect(w.text()).toContain("自动整理");
-    expect(w.text()).toContain("刷新今天的待办");
+    expect(w.text()).toContain("自动整理待办");
+    expect(w.text()).toContain("确认这次整理后这段会清掉，可以重新聊");
     await w.get("[data-nav=diary]").trigger("click");
     expect(w.text()).toContain("整理成日记");
-    expect(w.text()).not.toContain("自动整理");
+    expect(w.text()).not.toContain("自动整理待办");
     await w.get("[data-nav=chat]").trigger("click");
-    expect(w.text()).toContain("自动整理");
+    expect(w.text()).toContain("自动整理待办");
   });
 
   it("keeps debug off the chat screen and opens settings from the gear", async () => {

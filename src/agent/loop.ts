@@ -3,7 +3,7 @@ import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { filterProposedTodos, filterTodayPlanItems } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
-import type { ChatMessage, ChatMode, ProposedTodo, Todo } from "@/types";
+import type { ChatMessage, ChatMode, DailyLog, ProposedTodo, Todo } from "@/types";
 import { buildContextMessages } from "./context";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
@@ -134,6 +134,7 @@ export async function runAgent(input: {
   history: ChatMessage[];
   model: string;
   planConfirmed?: boolean;
+  yesterdayLog?: DailyLog | null;
 }): Promise<{ assistantText: string; stopped: boolean }> {
   const { deps, mode, userText, history, model } = input;
   const now = deps.now();
@@ -152,6 +153,7 @@ export async function runAgent(input: {
       doneToday,
       messages: history,
       planConfirmed: input.planConfirmed ?? false,
+      yesterdayLog: input.yesterdayLog ?? null,
     }),
     { role: "user", content: userText },
   ];

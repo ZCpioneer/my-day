@@ -475,20 +475,20 @@
             <div class="thread" id="thread">
               <div class="empty" id="chatEmpty">
                 <div class="glyph">朝暮</div>
-                <p>想到什么直接说。<br />聊完点发送左边的「自动整理」，刷新今天的待办。</p>
+                <p>想到什么直接说。<br />聊完点「自动整理待办」。确认今日计划后这段会清掉，可以重新聊。</p>
               </div>
             </div>
             <div class="composer">
               <div class="composer-shell">
                 <input id="input" type="text" placeholder="想到什么，直接说…" autocomplete="off" />
-                <button class="tidy" id="btnTidy" type="button" aria-label="自动整理">自动整理</button>
+                <button class="tidy" id="btnTidy" type="button" aria-label="自动整理待办">自动整理待办</button>
                 <button class="send" id="send" type="button" aria-label="发送">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
                     <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
                 </button>
               </div>
-              <div class="hint" id="composerHint">发送左边「自动整理」：根据刚才的对话，刷新今天的待办</div>
+              <div class="hint" id="composerHint">发送左边「自动整理待办」：通读这段对话，确认今日计划后清空，可以重新聊</div>
             </div>
           </section>
 
@@ -552,7 +552,7 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const thread = $("thread");
-    const chatEmpty = $("chatEmpty");
+    let chatEmpty = $("chatEmpty");
     const input = $("input");
     const btnTidy = $("btnTidy");
     const todos = [
@@ -573,12 +573,22 @@
     });
 
     function syncTidy() {
-      btnTidy.setAttribute("aria-label", "自动整理");
-      $("composerHint").textContent = "发送左边「自动整理」：根据刚才的对话，刷新今天的待办";
+      btnTidy.setAttribute("aria-label", "自动整理待办");
+      $("composerHint").textContent = "发送左边「自动整理待办」：通读这段对话，确认今日计划后清空，可以重新聊";
     }
 
     function hideEmpty() {
       if (chatEmpty && chatEmpty.parentNode) chatEmpty.remove();
+    }
+
+    function resetThread() {
+      thread.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.id = "chatEmpty";
+      empty.innerHTML = `<div class="glyph">朝暮</div><p>想到什么直接说。<br />聊完点「自动整理待办」。确认今日计划后这段会清掉，可以重新聊。</p>`;
+      thread.appendChild(empty);
+      chatEmpty = empty;
     }
 
     function addMsg(role, text) {
@@ -678,6 +688,7 @@
       wrap.innerHTML = `<div class="who">待确认</div>
         <div class="propose-shell"><div class="propose-core">
           <header>今天做这几件？</header>
+          <p class="propose-note">确认后这段对话会清空，可以重新聊。</p>
           ${items.map((it, i) => `<label class="todo-pick"><input type="checkbox" checked data-i="${i}" /> ${it.title}</label>`).join("")}
           <div class="propose-actions">
             <button class="btn-yes" type="button">确认今日计划</button>
@@ -702,10 +713,10 @@
             todos.push({ id: it.id, title: it.title, meta: "今天", when: "today", done: false, confirmed: true });
           }
         });
-        wrap.querySelector(".propose-core").innerHTML = `<header>今日计划已定</header><p style="font-size:13px;color:var(--paper-dim);line-height:1.6">去「待办」看今天那几件。没选上的还在「以后」。再点「自动整理」会再刷新今天。日记去日记页点「整理成日记」。</p>`;
         planConfirmed = true;
         syncTidy();
         renderTodos();
+        resetThread();
       };
       wrap.querySelector(".btn-no").onclick = () => {
         wrap.querySelector(".propose-core").innerHTML = `<header>先不定</header><p style="font-size:13px;color:var(--paper-dim)">今天的清单不动。没点确认，不会刷新。</p>`;
@@ -763,7 +774,7 @@
       go("chat");
       const later = todos.filter((t) => t.confirmed && !t.done && t.when !== "today");
       const today = todos.filter((t) => t.confirmed && !t.done && t.when === "today");
-      addMsg("me", "自动整理。");
+      addMsg("me", "请根据本段全部对话，整理并更新今日待办。");
       const laterBit = later.length ? `以后记着 ${later.length} 件：${later.map((t) => t.title).join("、")}。` : "以后是空的。";
       const todayBit = today.length ? `今天已经有 ${today.length} 件。` : "今天还没定。";
       await say(`好，来定今天。${todayBit}${laterBit}今天最想先拿下哪件？一天塞不了太多。`);
@@ -784,7 +795,7 @@
       await say(`对照今天：计划 ${todayDone.length + todayOpen.length} 件，勾了 ${todayDone.length} 件。${todayOpen.length ? "没做完：" + todayOpen.map((t) => t.title).join("、") + "。" : "都勾完了。"}以后那堆不算没做完。怎么了？`);
       await wait(400);
       addMsg("me", "调试卡了一下午。水电费忘了。有点烦。");
-      await say("下午啃硬的很正常。水电费还在今天的清单里，不点「自动整理」就不会换掉。周报在以后，不算今天没做完。");
+      await say("下午啃硬的很正常。水电费还在今天的清单里，不点「自动整理待办」就不会换掉。周报在以后，不算今天没做完。");
       addDiaryConfirm();
     }
 

@@ -12,6 +12,9 @@ export interface ChatMessage {
 export interface DayChat {
   date: string;
   messages: ChatMessage[];
+  /** Closed sessions, oldest first. Diary still reads these after the thread is cleared. */
+  archive?: ChatMessage[];
+  planConfirmedAt?: string;
 }
 
 export interface Todo {
@@ -22,6 +25,10 @@ export interface Todo {
   createdAt: string;
   completedAt?: string;
   fromMessageId?: string;
+  /** Missing means today, so old rows stay on today's list. */
+  when?: "today" | "later";
+  /** 桶内手动排位；缺失时按 createdAt 兜底（兼容旧数据）。 */
+  order?: number;
 }
 
 export interface DailyLog {
@@ -67,6 +74,7 @@ export interface DebugEntry {
 export interface ProposedTodo {
   title: string;
   reason?: string;
+  when?: "today" | "later";
 }
 
 export const DEFAULT_MODEL = "deepseek-v4-flash";

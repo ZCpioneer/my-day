@@ -55,6 +55,32 @@ describe("composeDailyLog", () => {
     expect(log.undone).toEqual(["周报"]);
   });
 
+  it("feeds archived session text to the diary model after the thread was cleared", async () => {
+    await composeDailyLog({
+      date: "2026-09-04",
+      now: new Date(2026, 8, 5, 8, 0, 0),
+      chat: {
+        date: "2026-09-04",
+        messages: [],
+        archive: [
+          {
+            id: "a1",
+            role: "user",
+            content: "早上说先做支付宝",
+            createdAt: "2026-09-04T01:00:00.000Z",
+          },
+        ],
+        planConfirmedAt: "2026-09-04T02:00:00.000Z",
+      },
+      todos,
+      model: "deepseek-v4-flash",
+      complete: async (req: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+        expect(JSON.stringify(req.messages)).toContain("早上说先做支付宝");
+        return { content: '{"plan":"先做支付宝","state":"还行"}', tool_calls: [] };
+      },
+    });
+  });
+
   it("reads JSON even when wrapped in a fence", async () => {
     const log = await composeDailyLog({
       date: "2026-09-04",

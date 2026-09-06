@@ -1,7 +1,7 @@
 # 朝暮 V0 设计
 
 日期：2026-09-05  
-状态：待实现  
+状态：已实现；待办三层见 `2026-09-05-today-later-auto-tidy.md`；自动整理与日记收口见 `2026-09-05-tidy-plan-and-diary-design.md`；确认后清对话见 `2026-09-05-close-session-after-plan-design.md`；自动整理一次重排今天和以后见 `2026-09-05-tidy-today-and-later-design.md`；长按拖动改栏见 `2026-09-05-todo-drag-when-design.md`  
 产品名：朝暮（仓库 `my-day`）
 
 面向自己用的「日志 + Todo + 思维整理 Agent」。第一版只做**一天的闭环**：早上立计划，白天随时聊并抽出待办，晚上对照完成情况回顾，留下一篇日记。

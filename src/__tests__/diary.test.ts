@@ -44,6 +44,23 @@ describe("hasDiaryTraces", () => {
     };
     expect(hasDiaryTraces({ chat: chat({ date: "2026-09-04" }), todos: [done], date: "2026-09-04" })).toBe(true);
     expect(hasDiaryTraces({ chat: chat({ date: "2026-09-05" }), todos: [done], date: "2026-09-05" })).toBe(false);
+    expect(
+      hasDiaryTraces({
+        chat: chat({
+          date: "2026-09-04",
+          archive: [
+            {
+              id: "a1",
+              role: "user",
+              content: "早上聊过",
+              createdAt: "2026-09-04T01:00:00.000Z",
+            },
+          ],
+        }),
+        todos: [],
+        date: "2026-09-04",
+      }),
+    ).toBe(true);
   });
 });
 

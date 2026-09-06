@@ -42,6 +42,35 @@ describe("chatRepo", () => {
     expect((await chatRepo.get("2026-09-05")).messages).toEqual([]);
     expect((await todoRepo.list()).map((t) => t.title)).toEqual(["周报"]);
   });
+
+  it("closeSession archives visible messages and stamps the plan", async () => {
+    await chatRepo.append("2026-09-05", {
+      id: "m1",
+      role: "user",
+      content: "支付宝必须今天弄完",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      mode: "chat",
+    });
+    await chatRepo.closeSession("2026-09-05", "2026-09-05T08:00:00.000Z");
+    const day = await chatRepo.get("2026-09-05");
+    expect(day.messages).toEqual([]);
+    expect(day.archive?.map((m) => m.content)).toEqual(["支付宝必须今天弄完"]);
+    expect(day.planConfirmedAt).toBe("2026-09-05T08:00:00.000Z");
+  });
+
+  it("keeps planConfirmedAt when appending messages", async () => {
+    await chatRepo.setPlanConfirmed("2026-09-05", "2026-09-05T02:00:00.000Z");
+    await chatRepo.append("2026-09-05", {
+      id: "m1",
+      role: "user",
+      content: "自动整理。",
+      createdAt: "2026-09-05T02:01:00.000Z",
+      mode: "morning",
+    });
+    const day = await chatRepo.get("2026-09-05");
+    expect(day.planConfirmedAt).toBe("2026-09-05T02:00:00.000Z");
+    expect(day.messages).toHaveLength(1);
+  });
 });
 
 describe("todoRepo", () => {
@@ -59,6 +88,112 @@ describe("todoRepo", () => {
     expect(done.completedAt).toBe("2026-09-05T12:00:00.000Z");
     const listed = await todoRepo.list();
     expect(listed).toHaveLength(1);
+  });
+
+  it("removes a todo without touching the others", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "周报",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "later",
+    });
+    await todoRepo.add({
+      id: "t2",
+      title: "支付宝",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "today",
+    });
+    await todoRepo.remove("t1");
+    expect((await todoRepo.list()).map((t) => t.title)).toEqual(["支付宝"]);
+  });
+
+  it("applyTodayPlan replaces today's set and persists when", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "支付宝",
+      status: "open",
+      sourceDate: "2026-09-04",
+      createdAt: "2026-09-04T01:00:00.000Z",
+      when: "later",
+    });
+    await todoRepo.add({
+      id: "t2",
+      title: "周报",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "today",
+    });
+    await todoRepo.applyTodayPlan(["支付宝"], new Date("2026-09-05T08:00:00.000Z"));
+    const listed = await todoRepo.list();
+    expect(listed.find((t) => t.title === "支付宝")?.when).toBe("today");
+    expect(listed.find((t) => t.title === "周报")?.when).toBe("later");
+  });
+
+  it("applyFullPlan writes new later titles and keeps unmentioned later", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "周报",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "later",
+    });
+    await todoRepo.applyFullPlan(
+      { today: ["支付宝"], later: ["买机票"] },
+      new Date("2026-09-05T08:00:00.000Z"),
+    );
+    const listed = await todoRepo.list();
+    expect(listed.find((t) => t.title === "支付宝")?.when).toBe("today");
+    expect(listed.find((t) => t.title === "周报")?.when).toBe("later");
+    expect(listed.find((t) => t.title === "买机票")?.when).toBe("later");
+  });
+
+  it("move reorders within a bucket by writing order", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "支付宝",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "today",
+    });
+    await todoRepo.add({
+      id: "t2",
+      title: "周报",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T02:00:00.000Z",
+      when: "today",
+    });
+    await todoRepo.move("t2", "today", 0, new Date("2026-09-05T08:00:00.000Z"));
+    const listed = await todoRepo.list();
+    expect(listed.find((t) => t.id === "t2")).toMatchObject({ when: "today", order: 0 });
+    expect(listed.find((t) => t.id === "t1")).toMatchObject({ when: "today", order: 1 });
+  });
+
+  it("move to the other bucket flips when without touching status", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "支付宝",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "today",
+    });
+    await todoRepo.move("t1", "later", 0, new Date("2026-09-05T08:00:00.000Z"));
+    const moved = (await todoRepo.list()).find((t) => t.id === "t1");
+    expect(moved).toMatchObject({ when: "later", order: 0, status: "open" });
+    expect(moved?.completedAt).toBeUndefined();
+  });
+
+  it("move on a missing id is a no-op", async () => {
+    await todoRepo.move("nope", "today", 0);
+    expect(await todoRepo.list()).toEqual([]);
   });
 });
 

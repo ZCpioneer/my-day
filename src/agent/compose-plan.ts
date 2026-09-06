@@ -1,0 +1,53 @@
+import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
+import { sessionTranscript } from "@/chat-session";
+import { partitionTodos } from "@/todos";
+import { filterPlanItems } from "@/todos-filter";
+import type { DayChat, ProposedTodo, Todo } from "@/types";
+import { parseJsonObject } from "./parse-json";
+import { tidyPlanPrompt } from "./prompt";
+
+function formatBucket(label: string, todos: Todo[]): string {
+  if (todos.length === 0) return `${label} 0 件。`;
+  return `${label} ${todos.length} 件：${todos.map((t) => t.title).join("；")}。`;
+}
+
+function asTitles(todos: Todo[], when: "today" | "later"): ProposedTodo[] {
+  return todos.map((t) => ({ title: t.title, when }));
+}
+
+export async function composePlan(input: {
+  date: string;
+  chat: DayChat;
+  todos: Todo[];
+  complete: (req: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
+  model: string;
+}): Promise<{ today: ProposedTodo[]; later: ProposedTodo[] }> {
+  const { today, later, doneToday } = partitionTodos(input.todos, input.date);
+  const facts = [
+    `日期：${input.date}`,
+    input.chat.planConfirmedAt ? "今天已经确认过今日计划，这次是刷新全部待办。" : "今天还没有确认过今日计划。",
+    formatBucket("今天", today),
+    formatBucket("以后", later),
+    formatBucket("今日已完成", doneToday),
+    "请把今天、以后、以及这段对话里的事合在一起重新排。today 宜少，其余进 later。",
+    "当前这段对话：",
+    sessionTranscript(input.chat.messages),
+  ].join("\n");
+
+  const res = await input.complete({
+    model: input.model,
+    messages: [
+      { role: "system", content: tidyPlanPrompt() },
+      { role: "user", content: facts },
+    ],
+    tools: [],
+    stream: false,
+  });
+  const parsed = typeof res.content === "string" ? parseJsonObject(res.content) : undefined;
+  if (!parsed || typeof parsed !== "object") throw new Error("待办这轮没整理成");
+  const parsedPlan = filterPlanItems(parsed);
+  return filterPlanItems({
+    today: parsedPlan.today.length ? parsedPlan.today : asTitles(today, "today"),
+    later: [...parsedPlan.later, ...asTitles(later, "later")],
+  });
+}
