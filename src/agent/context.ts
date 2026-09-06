@@ -1,5 +1,17 @@
 import type { ApiMessage } from "@/api/deepseek";
-import type { ChatMessage, ChatMode, DailyLog, Todo } from "@/types";
+import {
+  MEMORY_KIND_LABEL,
+  type ChatMessage,
+  type ChatMode,
+  type DailyLog,
+  type Memory,
+  type Project,
+  type Todo,
+  type Waiting,
+} from "@/types";
+
+/** 注入的聊天历史上限：事实已被解析层抽走，历史只负责语气与连贯。 */
+export const HISTORY_LIMIT = 12;
 
 function modeLabel(mode: ChatMode): string {
   if (mode === "chat") return "闲聊";
@@ -21,6 +33,22 @@ function formatYesterdayLog(log: DailyLog): string {
   return `昨天的日记：计划「${log.plan}」；做成了：${done}；没做完：${undone}；状态：${log.state}。`;
 }
 
+function formatProjects(projects: Project[]): string {
+  const active = projects.filter((p) => p.status === "active");
+  if (active.length === 0) return "进行中的项目 0 个。";
+  return `进行中的项目 ${active.length} 个：${active.map((p) => (p.note ? `${p.title}（${p.note}）` : p.title)).join("；")}。`;
+}
+
+function formatWaitings(waitings: Waiting[]): string {
+  if (waitings.length === 0) return "等待中 0 件。";
+  return `等待中 ${waitings.length} 件：${waitings.map((w) => (w.waitingOn ? `${w.text}（等${w.waitingOn}）` : w.text)).join("；")}。`;
+}
+
+function formatMemories(memories: Memory[]): string {
+  if (memories.length === 0) return "长期记忆 0 条。";
+  return `长期记忆 ${memories.length} 条：${memories.map((m) => `[${MEMORY_KIND_LABEL[m.kind]}]${m.text}`).join("；")}。`;
+}
+
 export function buildContextMessages(input: {
   date: string;
   timeLabel: string;
@@ -31,6 +59,9 @@ export function buildContextMessages(input: {
   messages: ChatMessage[];
   planConfirmed: boolean;
   yesterdayLog?: DailyLog | null;
+  projects?: Project[];
+  waitings?: Waiting[];
+  memories?: Memory[];
 }): ApiMessage[] {
   const facts = [
     `今天是 ${input.date}，${input.timeLabel}。当前模式：${modeLabel(input.mode)}。`,
@@ -39,9 +70,12 @@ export function buildContextMessages(input: {
     formatBucket("今天", input.todayTodos),
     formatBucket("以后", input.laterTodos),
     formatBucket("今日已完成", input.doneToday),
+    formatProjects(input.projects ?? []),
+    formatWaitings(input.waitings ?? []),
+    formatMemories(input.memories ?? []),
     "待办列表是唯一真相。有没有完成，只看上面的分区，不要根据聊天记录判断。以后不算没做完。",
   ].join("");
-  const history: ApiMessage[] = input.messages.map((m) => ({
+  const history: ApiMessage[] = input.messages.slice(-HISTORY_LIMIT).map((m) => ({
     role: m.role,
     content: m.content,
   }));
