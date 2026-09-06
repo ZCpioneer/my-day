@@ -1,6 +1,7 @@
 import { closeVisibleSession } from "../chat-session";
 import { newId } from "../ids";
 import { applyFullPlan, applyMove, applyTodayPlan } from "../todos";
+import { applyProjectMove } from "../todo-groups";
 import { localDate, shiftLocalDate } from "../dates";
 import { normKey } from "../norm";
 import type { ChatMessage, DailyLog, DayChat, Project, TimelineEvent, Todo, Waiting } from "../types";
@@ -152,14 +153,40 @@ export const todoRepo = {
     await txDone(tx);
     db.close();
   },
-  async move(id: string, when: "today" | "later", index: number, now: Date = new Date()): Promise<void> {
+  async move(
+    id: string,
+    when: "today" | "later",
+    index: number,
+    opts?: { projectId?: string | null },
+    now: Date = new Date(),
+  ): Promise<void> {
     const existing = await todoRepo.list();
-    const next = applyMove(existing, id, { when, index }, localDate(now));
+    const next = applyMove(existing, id, { when, index, projectId: opts?.projectId }, localDate(now));
     if (next === existing) return;
     const db = await openDb();
     const tx = db.transaction("todos", "readwrite");
     const store = tx.objectStore("todos");
     for (const todo of next) store.put(todo);
+    await txDone(tx);
+    db.close();
+  },
+  async setProject(id: string, projectId: string | null): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    const store = tx.objectStore("todos");
+    const todo = await new Promise<Todo>((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result as Todo);
+      req.onerror = () => reject(req.error);
+    });
+    // 先关连接再抛错：留着打开的连接会把后续 deleteDatabase 卡成永久 pending。
+    if (!todo) {
+      db.close();
+      throw new Error("todo not found");
+    }
+    if (projectId) todo.projectId = projectId;
+    else delete todo.projectId;
+    store.put(todo);
     await txDone(tx);
     db.close();
   },
@@ -281,6 +308,26 @@ export const projectRepo = {
     await txDone(tx);
     db.close();
     return next;
+  },
+  async put(p: Project): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("projects", "readwrite");
+    tx.objectStore("projects").put(p);
+    await txDone(tx);
+    db.close();
+  },
+  async move(id: string, index: number): Promise<void> {
+    const existing = await projectRepo.list();
+    const next = applyProjectMove(existing, id, index);
+    if (next === existing) return;
+    const changed = next.filter((p, i) => p !== existing[i]);
+    if (changed.length === 0) return;
+    const db = await openDb();
+    const tx = db.transaction("projects", "readwrite");
+    const store = tx.objectStore("projects");
+    for (const p of changed) store.put(p);
+    await txDone(tx);
+    db.close();
   },
 };
 

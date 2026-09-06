@@ -170,7 +170,7 @@ describe("todoRepo", () => {
       createdAt: "2026-09-05T02:00:00.000Z",
       when: "today",
     });
-    await todoRepo.move("t2", "today", 0, new Date("2026-09-05T08:00:00.000Z"));
+    await todoRepo.move("t2", "today", 0, undefined, new Date("2026-09-05T08:00:00.000Z"));
     const listed = await todoRepo.list();
     expect(listed.find((t) => t.id === "t2")).toMatchObject({ when: "today", order: 0 });
     expect(listed.find((t) => t.id === "t1")).toMatchObject({ when: "today", order: 1 });
@@ -185,7 +185,7 @@ describe("todoRepo", () => {
       createdAt: "2026-09-05T01:00:00.000Z",
       when: "today",
     });
-    await todoRepo.move("t1", "later", 0, new Date("2026-09-05T08:00:00.000Z"));
+    await todoRepo.move("t1", "later", 0, undefined, new Date("2026-09-05T08:00:00.000Z"));
     const moved = (await todoRepo.list()).find((t) => t.id === "t1");
     expect(moved).toMatchObject({ when: "later", order: 0, status: "open" });
     expect(moved?.completedAt).toBeUndefined();
@@ -243,5 +243,45 @@ describe("waitingRepo", () => {
     expect((await waitingRepo.listOpen()).map((w) => w.id)).toEqual(["w1"]);
     await waitingRepo.resolve("w1", new Date(2026, 8, 6, 18, 0, 0));
     expect(await waitingRepo.listOpen()).toEqual([]);
+  });
+});
+
+describe("todoRepo.move 带目标组 / setProject", () => {
+  it("move 带 projectId 会改归属", async () => {
+    await deleteDb();
+    await todoRepo.add({
+      id: "a1", title: "a1", status: "open", sourceDate: "2026-09-06",
+      createdAt: "2026-09-06T01:00:00.000Z", when: "later", projectId: "p1",
+    });
+    await todoRepo.move("a1", "later", 0, { projectId: "p2" }, new Date("2026-09-06T08:00:00.000Z"));
+    const t = (await todoRepo.list()).find((x) => x.id === "a1")!;
+    expect(t.projectId).toBe("p2");
+  });
+
+  it("setProject 设置与清除；找不到抛错", async () => {
+    await deleteDb();
+    await todoRepo.add({
+      id: "a1", title: "a1", status: "open", sourceDate: "2026-09-06",
+      createdAt: "2026-09-06T01:00:00.000Z", when: "later",
+    });
+    await todoRepo.setProject("a1", "p1");
+    expect((await todoRepo.list())[0].projectId).toBe("p1");
+    await todoRepo.setProject("a1", null);
+    expect("projectId" in (await todoRepo.list())[0]).toBe(false);
+    await expect(todoRepo.setProject("ghost", "p1")).rejects.toThrow("todo not found");
+  });
+});
+
+describe("projectRepo.put / move", () => {
+  it("put 直写；move 重写非 done 组 order", async () => {
+    await deleteDb();
+    const a = await projectRepo.upsertByTitle("甲", {});
+    const b = await projectRepo.upsertByTitle("乙", {});
+    await projectRepo.put({ ...b, note: "进展" });
+    expect((await projectRepo.list()).find((p) => p.id === b.id)?.note).toBe("进展");
+    await projectRepo.move(b.id, 0);
+    const list = await projectRepo.list();
+    expect(list.find((p) => p.id === b.id)?.order).toBe(0);
+    expect(list.find((p) => p.id === a.id)?.order).toBe(1);
   });
 });
