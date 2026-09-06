@@ -105,6 +105,8 @@ export interface Project {
   status: "active" | "done" | "paused";
   /** 最近进展。 */
   note?: string;
+  /** 组手动排位；缺失时按 createdAt 兜底（兼容旧数据）。 */
+  order?: number;
   createdAt: string;
   updatedAt: string;
 }

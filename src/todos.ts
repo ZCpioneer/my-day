@@ -10,7 +10,7 @@ export function todoWhen(t: Pick<Todo, "when">): "today" | "later" {
 }
 
 // 有 order 的按手动排位在前，没有的按创建时间兜底，最后按 id 保证稳定。
-function byOrder(a: Todo, b: Todo): number {
+export function byOrder(a: Todo, b: Todo): number {
   const oa = a.order;
   const ob = b.order;
   if (oa != null && ob != null && oa !== ob) return oa - ob;
