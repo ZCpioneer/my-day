@@ -38,6 +38,16 @@
         @skip="emit('skip')"
       />
       <TodoConfirm
+        v-else-if="pendingPropose && proposeKind === 'memory'"
+        :items="pendingPropose"
+        heading="记进长期记忆吗？"
+        yes-label="记住"
+        no-label="不用记"
+        note="长期记忆会影响以后每轮对话的建议。"
+        @confirm="emit('confirm', $event)"
+        @skip="emit('skip')"
+      />
+      <TodoConfirm
         v-else-if="pendingPropose"
         :items="pendingPropose"
         heading="记到「以后」吗？"

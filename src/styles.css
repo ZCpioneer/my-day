@@ -727,3 +727,9 @@ html.native .phone {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+.todo-meta {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-left: 6px;
+}
