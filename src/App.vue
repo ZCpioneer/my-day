@@ -521,6 +521,8 @@ async function onAssignGroup(id: string, projectId: string | null, newTitle?: st
   }
   await todoRepo.setProject(id, pid);
   todos.value = await todoRepo.list();
+  // 新建组后 projects 也得刷新，否则 partitionLater 认不出新组，任务落进未分组区
+  await refreshState();
 }
 
 async function onRenameGroup(id: string, title: string) {
