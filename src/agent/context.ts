@@ -1,11 +1,15 @@
 import type { ApiMessage } from "@/api/deepseek";
+import { normKey } from "@/norm";
+import { isChitchat } from "./parse";
 import {
   MEMORY_KIND_LABEL,
   type ChatMessage,
   type ChatMode,
   type DailyLog,
   type Memory,
+  type ParseResult,
   type Project,
+  type TimelineEvent,
   type Todo,
   type Waiting,
 } from "@/types";
@@ -49,6 +53,30 @@ function formatMemories(memories: Memory[]): string {
   return `长期记忆 ${memories.length} 条：${memories.map((m) => `[${MEMORY_KIND_LABEL[m.kind]}]${m.text}`).join("；")}。`;
 }
 
+export function matchedProjectKeys(result: ParseResult): string[] {
+  const keys = new Set<string>();
+  for (const u of result.projectUpdates) keys.add(normKey(u.project));
+  for (const t of result.tasks) if (t.project) keys.add(normKey(t.project));
+  return [...keys];
+}
+
+/** 按需取事件：纯闲聊不取；否则取当天全部 + 文本命中相关项目的近期事件，最多 10 条。 */
+export function selectRelevantEvents(
+  events: TimelineEvent[],
+  result: ParseResult | null | undefined,
+  today: string,
+): TimelineEvent[] {
+  if (!result || isChitchat(result)) return [];
+  const keys = matchedProjectKeys(result);
+  const picked = events.filter((e) => e.date === today || keys.some((k) => normKey(e.text).includes(k)));
+  return picked.slice(-10);
+}
+
+function formatEvents(events: TimelineEvent[]): string {
+  if (events.length === 0) return "";
+  return `近期相关记录 ${events.length} 条：${events.map((e) => (e.kind === "decision" ? `定了：${e.text}` : e.text)).join("；")}。`;
+}
+
 export function buildContextMessages(input: {
   date: string;
   timeLabel: string;
@@ -62,6 +90,8 @@ export function buildContextMessages(input: {
   projects?: Project[];
   waitings?: Waiting[];
   memories?: Memory[];
+  parseResult?: ParseResult | null;
+  recentEvents?: TimelineEvent[];
 }): ApiMessage[] {
   const facts = [
     `今天是 ${input.date}，${input.timeLabel}。当前模式：${modeLabel(input.mode)}。`,
@@ -73,6 +103,7 @@ export function buildContextMessages(input: {
     formatProjects(input.projects ?? []),
     formatWaitings(input.waitings ?? []),
     formatMemories(input.memories ?? []),
+    formatEvents(selectRelevantEvents(input.recentEvents ?? [], input.parseResult, input.date)),
     "待办列表是唯一真相。有没有完成，只看上面的分区，不要根据聊天记录判断。以后不算没做完。",
   ].join("");
   const history: ApiMessage[] = input.messages.slice(-HISTORY_LIMIT).map((m) => ({

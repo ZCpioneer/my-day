@@ -3,7 +3,7 @@ import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { filterTodayPlanItems } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
-import type { ChatMessage, ChatMode, DailyLog, Memory, Project, ProposedTodo, Todo, Waiting } from "@/types";
+import type { ChatMessage, ChatMode, DailyLog, Memory, ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
 import { buildContextMessages } from "./context";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
@@ -104,6 +104,8 @@ export async function runAgent(input: {
   projects?: Project[];
   waitings?: Waiting[];
   memories?: Memory[];
+  parseResult?: ParseResult | null;
+  recentEvents?: TimelineEvent[];
 }): Promise<{ assistantText: string; stopped: boolean }> {
   const { deps, mode, userText, history, model } = input;
   const now = deps.now();
@@ -126,6 +128,8 @@ export async function runAgent(input: {
       projects: input.projects ?? [],
       waitings: input.waitings ?? [],
       memories: input.memories ?? [],
+      parseResult: input.parseResult ?? null,
+      recentEvents: input.recentEvents ?? [],
     }),
     { role: "user", content: userText },
   ];

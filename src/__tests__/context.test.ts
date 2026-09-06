@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildContextMessages } from "@/agent/context";
-import type { ChatMessage, DailyLog } from "@/types";
+import { buildContextMessages, selectRelevantEvents } from "@/agent/context";
+import { emptyParseResult } from "@/agent/parse";
+import type { ChatMessage, DailyLog, TimelineEvent } from "@/types";
 
 const base = {
   date: "2026-09-06",
@@ -69,5 +70,40 @@ describe("buildContextMessages", () => {
     expect(contents).not.toContain("第7句");
     expect(contents).toContain("第8句");
     expect(contents).toContain("第19句");
+  });
+
+  it("纯闲聊不注入事件；关联项目时注入近期相关事件", () => {
+    const events: TimelineEvent[] = [
+      { id: "e1", date: "2026-09-05", createdAt: "2026-09-05T01:00:00.000Z", kind: "event", text: "朝暮解析层联调完了", fromMessageId: "m1" },
+      { id: "e2", date: "2026-09-05", createdAt: "2026-09-05T02:00:00.000Z", kind: "event", text: "中午吃了螺蛳粉", fromMessageId: "m2" },
+      { id: "e3", date: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", kind: "decision", text: "定了用 Postgres", fromMessageId: "m3" },
+    ];
+    const chitchat = buildContextMessages({ ...base, parseResult: null, recentEvents: events });
+    expect(chitchat[0]?.content ?? "").not.toContain("近期相关记录");
+
+    const withResult = buildContextMessages({
+      ...base,
+      parseResult: { ...emptyParseResult(), projectUpdates: [{ project: "朝暮", note: "x" }] },
+      recentEvents: events,
+    });
+    const facts = withResult[0]?.content ?? "";
+    expect(facts).toContain("近期相关记录 2 条");
+    expect(facts).toContain("朝暮解析层联调完了");
+    expect(facts).toContain("定了：定了用 Postgres");
+    expect(facts).not.toContain("螺蛳粉");
+  });
+
+  it("selectRelevantEvents 最多取 10 条", () => {
+    const events: TimelineEvent[] = Array.from({ length: 15 }, (_, i) => ({
+      id: `e${i}`,
+      date: "2026-09-06",
+      createdAt: `2026-09-06T${String(i).padStart(2, "0")}:00:00.000Z`,
+      kind: "event" as const,
+      text: `第${i}件`,
+      fromMessageId: "m",
+    }));
+    const picked = selectRelevantEvents(events, { ...emptyParseResult(), events: ["有事"] }, "2026-09-06");
+    expect(picked).toHaveLength(10);
+    expect(picked[0].id).toBe("e5");
   });
 });

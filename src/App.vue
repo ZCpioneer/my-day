@@ -104,6 +104,7 @@ import {
   type DayChat,
   type Memory,
   type MemoryCandidate,
+  type ParseResult,
   type Project,
   type ProposedTodo,
   type Settings,
@@ -289,8 +290,9 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       };
       await appendMessage(userMsg);
     }
+    let parseResult: ParseResult | null = null;
     if (userMsg) {
-      const parseResult = await parseInput({
+      parseResult = await parseInput({
         text: userText,
         date: date.value,
         todos: todos.value,
@@ -335,6 +337,8 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       projects: projects.value,
       waitings: waitings.value,
       memories: memories.value,
+      parseResult,
+      recentEvents: await eventRepo.listRecent(3),
     });
     if (closedThisTurn) return;
     await appendMessage({
