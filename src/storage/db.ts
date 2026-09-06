@@ -1,6 +1,6 @@
 import { closeVisibleSession } from "../chat-session";
 import { newId } from "../ids";
-import { applyFullPlan, applyMove, applyTodayPlan } from "../todos";
+import { applyFullPlan, applyMove, applyTodayPlan, type PlanEntry } from "../todos";
 import { applyProjectMove } from "../todo-groups";
 import { localDate, shiftLocalDate } from "../dates";
 import { normKey } from "../norm";
@@ -206,7 +206,7 @@ export const todoRepo = {
     db.close();
   },
   async applyFullPlan(
-    plan: { today: string[]; later: string[] },
+    plan: { today: PlanEntry[]; later: PlanEntry[] },
     now: Date = new Date(),
   ): Promise<void> {
     const date = localDate(now);

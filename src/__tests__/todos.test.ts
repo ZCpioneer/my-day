@@ -213,6 +213,28 @@ describe("applyFullPlan", () => {
     expect(next.find((t) => t.id === "new-1")).toMatchObject({ title: "水电", when: "today" });
     expect(next.filter((t) => t.title === "支付宝")).toHaveLength(1);
   });
+
+  it("条目带 projectId 时设置归属；裸标题不动现有归属", () => {
+    const existing: Todo[] = [
+      todo({ id: "a", title: "周报", when: "later" }),
+      todo({ id: "b", title: "找房", when: "later", projectId: "p9" }),
+    ];
+    let n = 0;
+    const next = applyFullPlan(
+      existing,
+      {
+        today: [],
+        later: [{ title: "周报", projectId: "p1" }, { title: "买机票", projectId: "p2" }, "找房"],
+      },
+      { date: "2026-09-05", nowIso: "2026-09-05T05:00:00.000Z", newId: () => `new-${++n}` },
+    );
+    // 既有任务改归属
+    expect(next.find((t) => t.id === "a")?.projectId).toBe("p1");
+    // 新建任务带归属
+    expect(next.find((t) => t.title === "买机票")?.projectId).toBe("p2");
+    // 裸标题不清空已有归属
+    expect(next.find((t) => t.id === "b")?.projectId).toBe("p9");
+  });
 });
 
 describe("applyMove 带目标组", () => {

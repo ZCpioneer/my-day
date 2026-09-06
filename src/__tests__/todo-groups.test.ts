@@ -49,7 +49,7 @@ describe("partitionLater", () => {
     expect(s.totalCount).toBe(3);
   });
 
-  it("未分组区在进行中组之后、已完成组之前；无进行中组时排最前", () => {
+  it("未分组区排在进行中组之后；已完成组不出现", () => {
     const ps = [project({ id: "p1" }), project({ id: "p2", status: "done" })];
     const ts = [
       todo({ id: "t1", projectId: "p1", when: "later" }),
@@ -57,17 +57,28 @@ describe("partitionLater", () => {
       todo({ id: "t8", projectId: "p2", status: "done", completedAt: "2026-09-01T01:00:00.000Z" }),
     ];
     const keys = partitionLater(ts, ps).map((s) => s.project?.id ?? "ungrouped");
-    expect(keys).toEqual(["p1", "ungrouped", "p2"]);
+    expect(keys).toEqual(["p1", "ungrouped"]);
   });
 
-  it("已完成组没有未完成任务也显示（沉底）；进行中组没有以后任务则不显示", () => {
+  it("已完成组一律不显示；进行中的空组也显示（便于拖入）", () => {
     const ps = [project({ id: "p1" }), project({ id: "p2", status: "done" })];
     const ts = [
       todo({ id: "t1", projectId: "p1", when: "today" }),
       todo({ id: "t2", projectId: "p2", status: "done", completedAt: "2026-09-01T01:00:00.000Z" }),
     ];
-    const keys = partitionLater(ts, ps).map((s) => s.project?.id ?? "ungrouped");
-    expect(keys).toEqual(["p2"]);
+    const sections = partitionLater(ts, ps);
+    const keys = sections.map((s) => s.project?.id ?? "ungrouped");
+    expect(keys).toEqual(["p1"]);
+    expect(sections[0].todos).toEqual([]);
+    expect(sections[0].totalCount).toBe(1);
+  });
+
+  it("全新建的空组（没有任何任务）也显示", () => {
+    const ps = [project({ id: "p1" })];
+    const [s] = partitionLater([], ps);
+    expect(s.project?.id).toBe("p1");
+    expect(s.todos).toEqual([]);
+    expect(s.totalCount).toBe(0);
   });
 
   it("projectId 指向不存在的组时进未分组区", () => {

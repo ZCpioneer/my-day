@@ -86,17 +86,30 @@ export function applyTodayPlan(
   return next;
 }
 
+// 整理计划的条目：裸标题，或带归属组 id（由调用方先把组名解析成 id）。
+export type PlanEntry = string | { title: string; projectId?: string };
+
+function asEntry(e: PlanEntry): { title: string; projectId?: string } {
+  return typeof e === "string" ? { title: e } : e;
+}
+
 export function applyFullPlan(
   existing: Todo[],
-  plan: { today: string[]; later: string[] },
+  plan: { today: PlanEntry[]; later: PlanEntry[] },
   opts: { date: string; nowIso: string; newId: () => string },
 ): Todo[] {
-  const todayWanted = plan.today.map((t) => t.trim()).filter(Boolean);
-  const todayNorm = new Set(todayWanted.map(norm));
+  const todayWanted = plan.today
+    .map(asEntry)
+    .map((e) => ({ ...e, title: e.title.trim() }))
+    .filter((e) => e.title);
+  const todayNorm = new Set(todayWanted.map((e) => norm(e.title)));
   const laterWanted = plan.later
-    .map((t) => t.trim())
-    .filter((t) => t && !todayNorm.has(norm(t)));
-  const laterNorm = new Set(laterWanted.map(norm));
+    .map(asEntry)
+    .map((e) => ({ ...e, title: e.title.trim() }))
+    .filter((e) => e.title && !todayNorm.has(norm(e.title)));
+  const laterNorm = new Set(laterWanted.map((e) => norm(e.title)));
+  const projectOf = new Map<string, string | undefined>();
+  for (const e of [...todayWanted, ...laterWanted]) projectOf.set(norm(e.title), e.projectId);
   const next = existing.map((t) => ({ ...t }));
 
   for (const t of next) {
@@ -105,32 +118,29 @@ export function applyFullPlan(
     if (todayNorm.has(key)) t.when = "today";
     else if (laterNorm.has(key)) t.when = "later";
     else if (todoWhen(t) === "today") t.when = "later";
+    const pid = projectOf.get(key);
+    if (pid !== undefined) t.projectId = pid;
   }
 
   const existingNorm = new Set(next.map((t) => norm(t.title)));
-  for (const title of todayWanted) {
-    if (existingNorm.has(norm(title))) continue;
-    next.push({
-      id: opts.newId(),
-      title,
-      status: "open",
-      sourceDate: opts.date,
-      createdAt: opts.nowIso,
-      when: "today",
-    });
-    existingNorm.add(norm(title));
-  }
-  for (const title of laterWanted) {
-    if (existingNorm.has(norm(title))) continue;
-    next.push({
-      id: opts.newId(),
-      title,
-      status: "open",
-      sourceDate: opts.date,
-      createdAt: opts.nowIso,
-      when: "later",
-    });
-    existingNorm.add(norm(title));
+  for (const [list, when] of [
+    [todayWanted, "today"],
+    [laterWanted, "later"],
+  ] as const) {
+    for (const e of list) {
+      if (existingNorm.has(norm(e.title))) continue;
+      const row: Todo = {
+        id: opts.newId(),
+        title: e.title,
+        status: "open",
+        sourceDate: opts.date,
+        createdAt: opts.nowIso,
+        when,
+      };
+      if (e.projectId) row.projectId = e.projectId;
+      next.push(row);
+      existingNorm.add(norm(e.title));
+    }
   }
   return next;
 }

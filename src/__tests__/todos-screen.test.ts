@@ -176,20 +176,40 @@ describe("TodoScreen 项目分区", () => {
     { id: "p2", title: "发布会", status: "done", createdAt: "2026-09-05T01:00:00.000Z", updatedAt: "2026-09-05T02:00:00.000Z" },
   ];
 
-  it("以后栏按组分区：组名、进度、未分组区、已完成组沉底灰显", async () => {
+  it("以后栏按组分区：组名、进度、未分组区；已完成组不显示", async () => {
     localStorage.clear();
     const w = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
     await flushPromises();
     const keys = w.findAll("[data-group]").map((el) => el.attributes("data-group"));
-    expect(keys).toEqual(["p1", "", "p2"]);
+    expect(keys).toEqual(["p1", ""]);
     expect(w.get("[data-group=p1]").text()).toContain("搬家");
     expect(w.get("[data-group=p1]").text()).toContain("1/3");
     expect(w.get("[data-group=p1]").text()).toContain("找房");
     expect(w.get("[data-group='']").text()).toContain("未分组");
     expect(w.get("[data-group='']").text()).toContain("零散事");
-    const doneHead = w.get("[data-group=p2] .group-head");
-    expect(doneHead.text()).toContain("发布会");
-    expect(doneHead.classes()).toContain("done");
+    // 已完成的组不在「以后」残留
+    expect(w.find("[data-group=p2]").exists()).toBe(false);
+  });
+
+  it("空的进行中组也显示（便于拖入），且没有任务时不显示进度", async () => {
+    localStorage.clear();
+    const w = mount(TodoScreen, {
+      props: { todos: [], projects: [groupedProjects[0]] },
+    });
+    await flushPromises();
+    const head = w.get("[data-group=p1] .group-head");
+    expect(head.text()).toContain("搬家");
+    expect(head.find(".group-progress").exists()).toBe(false);
+  });
+
+  it("点「＋ 新建组」打开浮层，输入组名后 emit createGroup", async () => {
+    localStorage.clear();
+    const w = mount(TodoScreen, { props: { todos: [], projects: [] } });
+    await flushPromises();
+    await w.get("[data-group-add]").trigger("click");
+    await w.get(".sheet input").setValue("装修");
+    await w.get("[data-new-confirm]").trigger("click");
+    expect(w.emitted("createGroup")?.[0]).toEqual(["装修"]);
   });
 
   it("点组标题折叠/展开，状态写进 localStorage", async () => {

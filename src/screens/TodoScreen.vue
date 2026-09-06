@@ -60,7 +60,7 @@
               @click.stop
             >⠿</span>
             <span class="group-name">{{ section.project?.title ?? "未分组" }}</span>
-            <span v-if="section.project" class="group-progress">
+            <span v-if="section.project && section.totalCount > 0" class="group-progress">
               {{ section.doneCount }}/{{ section.totalCount }}
             </span>
             <button
@@ -90,7 +90,8 @@
             />
           </template>
         </div>
-        <p v-if="later.length === 0" class="empty" style="margin: 8px 0">没有记着的事。</p>
+        <button class="group-add" data-group-add type="button" @click="sheet = { mode: 'create' }">＋ 新建组</button>
+        <p v-if="later.length === 0 && laterSections.length === 0" class="empty" style="margin: 8px 0">没有记着的事。</p>
       </div>
       <div class="todo-bucket" data-bucket="done">
         <div class="section-label">已完成</div>
@@ -151,12 +152,15 @@ const emit = defineEmits<{
   assign: [todoId: string, projectId: string | null, newTitle?: string];
   renameGroup: [id: string, title: string];
   completeGroup: [id: string, done: boolean];
+  createGroup: [title: string];
 }>();
 
 const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
 
 const openId = ref<string | null>(null);
-const sheet = ref<{ mode: "assign"; todoId: string } | { mode: "manage"; project: Project } | null>(null);
+const sheet = ref<
+  { mode: "assign"; todoId: string } | { mode: "manage"; project: Project } | { mode: "create" } | null
+>(null);
 
 function openCountOf(pid: string): number {
   return props.todos.filter((t) => t.projectId === pid && t.status === "open").length;
@@ -190,6 +194,7 @@ function onSheetPick(projectId: string | null, newTitle?: string) {
   const s = sheet.value;
   sheet.value = null;
   if (s?.mode === "assign") emit("assign", s.todoId, projectId, newTitle);
+  if (s?.mode === "create" && newTitle) emit("createGroup", newTitle);
 }
 
 function onSheetRename(title: string) {

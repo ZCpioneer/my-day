@@ -1,7 +1,7 @@
 <template>
   <div class="sheet-mask" @click.self="emit('close')">
     <div class="sheet">
-      <header>{{ mode === "assign" ? "归到哪个组？" : (group?.title ?? "") }}</header>
+      <header>{{ mode === "assign" ? "归到哪个组？" : mode === "create" ? "新建组" : (group?.title ?? "") }}</header>
       <template v-if="mode === 'assign'">
         <button
           v-for="p in openProjects"
@@ -16,6 +16,12 @@
         <button class="sheet-opt" type="button" data-pick="none" @click="emit('pick', null, undefined)">未分组</button>
         <div class="sheet-row">
           <input v-model="newTitle" type="text" placeholder="新建组…" @keydown.enter="onNew" />
+          <button type="button" data-new-confirm :disabled="!newTitle.trim()" @click="onNew">建好</button>
+        </div>
+      </template>
+      <template v-else-if="mode === 'create'">
+        <div class="sheet-row">
+          <input v-model="newTitle" type="text" placeholder="组名，如：搬家" @keydown.enter="onNew" />
           <button type="button" data-new-confirm :disabled="!newTitle.trim()" @click="onNew">建好</button>
         </div>
       </template>
@@ -39,7 +45,7 @@ import { computed, ref } from "vue";
 import type { Project } from "@/types";
 
 const props = defineProps<{
-  mode: "assign" | "manage";
+  mode: "assign" | "manage" | "create";
   projects: Project[];
   current?: string | null;
   group?: Project | null;

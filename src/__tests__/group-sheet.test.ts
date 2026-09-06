@@ -29,6 +29,19 @@ describe("GroupSheet assign 模式", () => {
   });
 });
 
+describe("GroupSheet create 模式", () => {
+  it("只有输入行，确认抛出组名", async () => {
+    const w = mount(GroupSheet, { props: { mode: "create", projects } });
+    expect(w.text()).toContain("新建组");
+    expect(w.find("[data-pick]").exists()).toBe(false);
+    const btn = w.get("[data-new-confirm]");
+    expect(btn.attributes("disabled")).toBeDefined();
+    await w.get("input").setValue("装修");
+    await btn.trigger("click");
+    expect(w.emitted("pick")?.[0]).toEqual([null, "装修"]);
+  });
+});
+
 describe("GroupSheet manage 模式", () => {
   it("有未完任务时不出完成按钮；能完成时抛出 complete", async () => {
     const busy = mount(GroupSheet, {

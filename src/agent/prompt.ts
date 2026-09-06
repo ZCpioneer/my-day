@@ -6,8 +6,8 @@ export const KICKOFF_TEXT =
 export function tidyPlanPrompt(): string {
   return `你在为「朝暮」重排全部待办。只输出一个 JSON 对象，不要 markdown，不要其它字，不要寒暄。
 字段：
-- today: { "title": string, "reason"?: string }[]
-- later: { "title": string, "reason"?: string }[]
+- today: { "title": string, "reason"?: string, "project"?: string }[]
+- later: { "title": string, "reason"?: string, "project"?: string }[]
 
 怎么想：
 1. 通读当前这段对话，对照现在的「今天」「以后」「今日已完成」。
@@ -16,7 +16,8 @@ export function tidyPlanPrompt(): string {
 4. later 是完整的以后清单：现在先不做但要记得的，包括从今天拿下来的、原来就在以后的、以及对话里提到但今天不做的。
 5. 已完成的不要再列入。不要编造用户没提过、清单里也没有的事。
 6. 同一件事不要拆成两条，也不要在 today 和 later 里重复。
-7. 不要写日记。`;
+7. 属于某摊事的任务带上 "project"：优先从「现有项目」里选，新冒出来的一摊事可以起个新组名；拿不准就不带，别硬凑。已经在某个项目里的任务，重排后保持原归属。
+8. 不要写日记。`;
 }
 
 export function systemPrompt(): string {

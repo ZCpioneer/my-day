@@ -75,6 +75,32 @@ describe("解析 → 确认 → 落库", () => {
     expect((await eventRepo.listRecent(1)).map((e) => e.text)).toEqual(["解析层联调完了"]);
   });
 
+  it("确认框里的新组名会建组并挂上（即使没有 projectUpdates）", async () => {
+    mockPipeline(
+      JSON.stringify({
+        events: [],
+        decisions: [],
+        tasks: [{ title: "找房", project: "搬家" }],
+        projectUpdates: [],
+        waitings: [],
+        waitingsResolved: [],
+      }),
+      "已记下。",
+    );
+    const w = mount(App);
+    await waitFor(() => w.find("input").exists());
+    await w.get("input").setValue("下个月要搬家，先找房");
+    await w.get("button.send").trigger("click");
+    await waitFor(() => w.text().includes("记到「以后」吗？"));
+    await w.get(".btn-yes").trigger("click");
+    await waitFor(() => w.text().includes("已记下。"));
+    const projects = await projectRepo.list();
+    expect(projects.map((p) => p.title)).toEqual(["搬家"]);
+    const todos = await todoRepo.list();
+    expect(todos).toHaveLength(1);
+    expect(todos[0].projectId).toBe(projects[0].id);
+  });
+
   it("纯闲聊不弹任何确认框", async () => {
     mockPipeline("{}", "哈哈是啊。");
     const w = mount(App);

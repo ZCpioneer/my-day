@@ -30,14 +30,15 @@ export function sortProjects(projects: Project[]): Project[] {
   return [...open, ...done];
 }
 
-/** 「以后」栏分区：进行中组（有以后任务才显示）→ 未分组区 → 已完成组（沉底，空也显示）。 */
+/** 「以后」栏分区：进行中组（含空组，便于拖入）→ 未分组区。
+ *  已完成组不显示——已完成的事不再关心分组；重打开任务会经 syncProjectStatuses 把组激活回来。 */
 export function partitionLater(todos: Todo[], projects: Project[]): LaterSection[] {
   const sections: LaterSection[] = [];
   const known = new Set(projects.map((p) => p.id));
   for (const p of sortProjects(projects)) {
+    if (p.status === "done") continue;
     const mine = todos.filter((t) => t.projectId === p.id);
     const open = mine.filter((t) => t.status === "open" && todoWhen(t) === "later").sort(byOrder);
-    if (open.length === 0 && p.status !== "done") continue;
     sections.push({
       project: p,
       todos: open,
@@ -49,10 +50,7 @@ export function partitionLater(todos: Todo[], projects: Project[]): LaterSection
     .filter((t) => t.status === "open" && todoWhen(t) === "later" && (!t.projectId || !known.has(t.projectId)))
     .sort(byOrder);
   if (stray.length > 0) {
-    const ungrouped: LaterSection = { project: null, todos: stray, doneCount: 0, totalCount: stray.length };
-    const doneStart = sections.findIndex((s) => s.project?.status === "done");
-    if (doneStart < 0) sections.push(ungrouped);
-    else sections.splice(doneStart, 0, ungrouped);
+    sections.push({ project: null, todos: stray, doneCount: 0, totalCount: stray.length });
   }
   return sections;
 }

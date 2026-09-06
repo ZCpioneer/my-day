@@ -40,6 +40,7 @@
         @assign="onAssignGroup"
         @rename-group="onRenameGroup"
         @complete-group="onCompleteGroup"
+        @create-group="onCreateGroup"
       />
       <DiaryScreen
         v-else-if="tab === 'diary'"
@@ -203,13 +204,21 @@ const routeDeps: RouteDeps = {
   newId,
 };
 
+// 组名 → 组 id：没有就建出来（否则确认框/整理给出的新组会静默落进未分组）。
+async function resolveProjectId(title?: string): Promise<string | undefined> {
+  const key = normKey(title ?? "");
+  if (!key) return undefined;
+  const hit = projects.value.find((p) => normKey(p.title) === key);
+  if (hit) return hit.id;
+  const created = await projectRepo.upsertByTitle((title ?? "").trim(), {});
+  await refreshState();
+  return created.id;
+}
+
 async function addTodos(items: ProposedTodo[]) {
   const sourceDate = localDate();
   const createdAt = new Date().toISOString();
   for (const item of items) {
-    const project = item.project
-      ? projects.value.find((p) => normKey(p.title) === normKey(item.project ?? ""))
-      : undefined;
     await todoRepo.add({
       id: newId(),
       title: item.title,
@@ -219,7 +228,7 @@ async function addTodos(items: ProposedTodo[]) {
       when: "later",
       priority: item.priority,
       due: item.due,
-      projectId: project?.id,
+      projectId: await resolveProjectId(item.project),
     });
   }
   todos.value = await todoRepo.list();
@@ -243,13 +252,16 @@ async function setTodayPlan(items: ProposedTodo[]) {
 }
 
 async function applyAcceptedPlan(items: ProposedTodo[]) {
-  await todoRepo.applyFullPlan({
-    today: items.filter((i) => i.when !== "later").map((i) => i.title),
-    later: items.filter((i) => i.when === "later").map((i) => i.title),
-  });
+  const toEntry = async (i: ProposedTodo) => ({ title: i.title, projectId: await resolveProjectId(i.project) });
+  const today: { title: string; projectId?: string }[] = [];
+  for (const i of items.filter((x) => x.when !== "later")) today.push(await toEntry(i));
+  const later: { title: string; projectId?: string }[] = [];
+  for (const i of items.filter((x) => x.when === "later")) later.push(await toEntry(i));
+  await todoRepo.applyFullPlan({ today, later });
   await chatRepo.closeSession(date.value, new Date().toISOString());
   chat.value = await chatRepo.get(date.value);
   todos.value = await todoRepo.list();
+  await syncProjects();
 }
 
 const agentDeps: AgentDeps = {
@@ -374,6 +386,7 @@ async function onTidy() {
       date: date.value,
       chat: chat.value,
       todos: todos.value,
+      projects: projects.value,
       complete,
       model: settings.value.model,
     });
@@ -555,6 +568,12 @@ async function onCompleteGroup(id: string, done: boolean) {
   const p = projects.value.find((x) => x.id === id);
   if (!p) return;
   await projectRepo.put({ ...p, status: done ? "done" : "active", updatedAt: new Date().toISOString() });
+  await refreshState();
+}
+
+async function onCreateGroup(title: string) {
+  await ready;
+  await projectRepo.upsertByTitle(title, {});
   await refreshState();
 }
 

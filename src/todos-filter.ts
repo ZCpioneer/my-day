@@ -48,10 +48,12 @@ function asPlanBucket(raw: unknown, when: "today" | "later"): ProposedTodo[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const reason = (it as { reason?: unknown }).reason;
+    const project = (it as { project?: unknown }).project;
     out.push({
       title: trimmed,
       reason: typeof reason === "string" ? reason.trim() || undefined : undefined,
       when,
+      project: typeof project === "string" && project.trim() ? project.trim() : undefined,
     });
   }
   return out;

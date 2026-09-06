@@ -664,6 +664,18 @@ html.native .phone {
   border-top: 3px solid var(--dawn);
   margin: -12px 4px 0;
 }
+.group-add {
+  border: 1px dashed rgba(239, 230, 212, 0.25);
+  background: none;
+  color: var(--mute);
+  border-radius: 14px;
+  padding: 10px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.group-add:active { filter: brightness(1.3); }
 
 .log-card {
   padding: 5px;
