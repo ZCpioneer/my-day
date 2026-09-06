@@ -1,7 +1,7 @@
 # 结构化记忆架构设计（解析层 + Timeline/State/Memory + Context Builder）
 
 日期：2026-09-06
-状态：已确认方向（方案 A：独立解析调用），待实现
+状态：已实现（P1 + P2），实现计划：`docs/superpowers/plans/2026-09-06-structured-memory.md`
 产品名：朝暮（仓库 `my-day`）
 
 ## 0. 背景与目标
