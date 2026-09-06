@@ -56,3 +56,21 @@ export async function saveSettings(s: Settings, prefs: Prefs = defaultPrefs()): 
 export function effectiveApiKey(s: Settings, fallback: string = DEFAULT_DEBUG_KEY): string | null {
   return resolveApiKey(s.apiKey, fallback);
 }
+
+const COLLAPSED_KEY = "zhaomu.collapsed-groups";
+
+/** 「以后」栏各分区的折叠状态（组 id 列表；未分组区用空串）。 */
+export async function loadCollapsedGroups(prefs: Prefs = defaultPrefs()): Promise<string[]> {
+  const raw = await prefs.get(COLLAPSED_KEY);
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveCollapsedGroups(ids: string[], prefs: Prefs = defaultPrefs()): Promise<void> {
+  await prefs.set(COLLAPSED_KEY, JSON.stringify(ids));
+}

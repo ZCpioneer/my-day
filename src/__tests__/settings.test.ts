@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { loadSettings, saveSettings, effectiveApiKey } from "@/storage/settings";
+import {
+  loadSettings,
+  saveSettings,
+  effectiveApiKey,
+  loadCollapsedGroups,
+  saveCollapsedGroups,
+} from "@/storage/settings";
 import { DEFAULT_MODEL } from "@/types";
 
 const mem = new Map<string, string>();
@@ -44,5 +50,22 @@ describe("effectiveApiKey", () => {
         "sk-debug",
       ),
     ).toBe("sk-debug");
+  });
+});
+
+describe("collapsedGroups", () => {
+  it("roundtrip；空串 key（未分组区）也能存", async () => {
+    mem.clear();
+    expect(await loadCollapsedGroups(prefs)).toEqual([]);
+    await saveCollapsedGroups(["p1", ""], prefs);
+    expect(await loadCollapsedGroups(prefs)).toEqual(["p1", ""]);
+  });
+
+  it("损坏内容回退空数组", async () => {
+    mem.clear();
+    mem.set("zhaomu.collapsed-groups", "{oops");
+    expect(await loadCollapsedGroups(prefs)).toEqual([]);
+    mem.set("zhaomu.collapsed-groups", "[1,2]");
+    expect(await loadCollapsedGroups(prefs)).toEqual([]);
   });
 });
