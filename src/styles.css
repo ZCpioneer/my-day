@@ -271,6 +271,22 @@ body::before {
   letter-spacing: 0.12em;
   padding: 8px 4px 2px;
 }
+.propose-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--paper);
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.propose-new {
+  font-size: 10px;
+  color: var(--dawn);
+  border: 1px solid var(--dawn);
+  border-radius: 6px;
+  padding: 0 4px;
+}
 .todo-pick {
   display: flex;
   align-items: flex-start;

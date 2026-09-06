@@ -23,6 +23,7 @@
         :awaiting="awaiting"
         :pending-propose="pendingPropose"
         :propose-kind="proposeKind"
+        :existing-projects="projects.map((p) => p.title)"
         @send="onSend"
         @tidy="onTidy"
         @confirm="onConfirmPropose"

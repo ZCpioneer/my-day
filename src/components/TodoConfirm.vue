@@ -5,25 +5,18 @@
       <div class="propose-core">
         <header>{{ heading }}</header>
         <p v-if="note" class="propose-note">{{ note }}</p>
-        <template v-if="showGroups">
-          <p v-if="todayIdxs.length" class="propose-group">今天</p>
-          <label v-for="i in todayIdxs" :key="`t-${i}`" class="todo-pick">
+        <template v-for="(s, si) in sections" :key="si">
+          <p
+            v-if="showWhen && (si === 0 || sections[si - 1].when !== s.when)"
+            class="propose-group"
+          >{{ s.when === "today" ? "今天" : "以后" }}</p>
+          <p v-if="s.project" class="propose-sub">
+            {{ s.project }}<span v-if="s.isNew" class="propose-new">新</span>
+          </p>
+          <label v-for="i in s.idxs" :key="`${s.when}-${s.project ?? ''}-${i}`" class="todo-pick">
             <input v-model="checked[i]" type="checkbox" />
             <span>{{ items[i].title }}</span>
             <span v-if="metaFor(items[i])" class="todo-meta">{{ metaFor(items[i]) }}</span>
-          </label>
-          <p v-if="laterIdxs.length" class="propose-group">以后</p>
-          <label v-for="i in laterIdxs" :key="`l-${i}`" class="todo-pick">
-            <input v-model="checked[i]" type="checkbox" />
-            <span>{{ items[i].title }}</span>
-            <span v-if="metaFor(items[i])" class="todo-meta">{{ metaFor(items[i]) }}</span>
-          </label>
-        </template>
-        <template v-else>
-          <label v-for="(it, i) in items" :key="i" class="todo-pick">
-            <input v-model="checked[i]" type="checkbox" />
-            <span>{{ it.title }}</span>
-            <span v-if="metaFor(it)" class="todo-meta">{{ metaFor(it) }}</span>
           </label>
         </template>
         <div class="propose-actions">
@@ -38,6 +31,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { localDate } from "@/dates";
+import { normKey } from "@/norm";
 import { todoMeta } from "@/todo-meta";
 import type { ProposedTodo } from "@/types";
 
@@ -48,12 +42,15 @@ const props = withDefaults(
     yesLabel?: string;
     noLabel?: string;
     note?: string;
+    /** 已有项目标题，用来给新组打「新」标。 */
+    existingProjects?: string[];
   }>(),
   {
     items: () => [],
     heading: "要从对话里加到 Todo 吗？",
     yesLabel: "确认加入",
     noLabel: "这次不加",
+    existingProjects: () => [],
   },
 );
 const emit = defineEmits<{
@@ -62,13 +59,38 @@ const emit = defineEmits<{
 }>();
 
 const items = computed(() => props.items);
-const todayIdxs = computed(() =>
-  props.items.map((it, i) => (it.when !== "later" ? i : -1)).filter((i) => i >= 0),
+
+interface ConfirmSection {
+  when: "today" | "later";
+  project: string | null;
+  isNew: boolean;
+  idxs: number[];
+}
+
+const sections = computed<ConfirmSection[]>(() => {
+  const existing = new Set((props.existingProjects ?? []).map((t) => normKey(t)));
+  const out: ConfirmSection[] = [];
+  for (const when of ["today", "later"] as const) {
+    const byProject = new Map<string | null, number[]>();
+    props.items.forEach((it, i) => {
+      if ((it.when === "later" ? "later" : "today") !== when) return;
+      const key = it.project?.trim() ? it.project.trim() : null;
+      const arr = byProject.get(key) ?? [];
+      arr.push(i);
+      byProject.set(key, arr);
+    });
+    const keys = [...byProject.keys()].sort((a, b) => (a === null ? 1 : b === null ? -1 : 0));
+    for (const key of keys) {
+      out.push({ when, project: key, isNew: !!key && !existing.has(normKey(key)), idxs: byProject.get(key)! });
+    }
+  }
+  return out;
+});
+
+const showWhen = computed(
+  () => props.items.some((it) => it.when === "later") && props.items.some((it) => it.when !== "later"),
 );
-const laterIdxs = computed(() =>
-  props.items.map((it, i) => (it.when === "later" ? i : -1)).filter((i) => i >= 0),
-);
-const showGroups = computed(() => laterIdxs.value.length > 0);
+
 const checked = ref<boolean[]>([]);
 
 watch(

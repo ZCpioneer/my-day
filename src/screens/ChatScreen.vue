@@ -34,6 +34,7 @@
         yes-label="确认这次整理"
         no-label="先不定"
         note="确认后这段对话会清空，可以重新聊。"
+        :existing-projects="existingProjects"
         @confirm="emit('confirm', $event)"
         @skip="emit('skip')"
       />
@@ -43,6 +44,7 @@
         heading="记到「以后」吗？"
         yes-label="确认记下"
         no-label="这次不加"
+        :existing-projects="existingProjects"
         @confirm="emit('confirm', $event)"
         @skip="emit('skip')"
       />
@@ -93,6 +95,7 @@ const props = defineProps<{
   awaiting: boolean;
   pendingPropose: ProposedTodo[] | null;
   proposeKind?: "later" | "today";
+  existingProjects?: string[];
 }>();
 
 const emit = defineEmits<{
