@@ -44,7 +44,7 @@ describe("routeParseResult", () => {
       ...emptyParseResult(),
       events: ["中午吃了螺蛳粉"],
       decisions: ["定了用 Postgres"],
-      projectUpdates: [{ project: "朝暮", note: "解析层联调完了" }],
+      projectUpdates: [{ project: "日程秘书", note: "解析层联调完了" }],
       waitings: [{ text: "等房东答复", waitingOn: "房东" }],
     };
     const out = await routeParseResult(r, OPTS, deps);
@@ -53,7 +53,7 @@ describe("routeParseResult", () => {
       ["decision", "定了用 Postgres"],
     ]);
     expect(events[0].fromMessageId).toBe("m1");
-    expect(projects).toEqual([{ title: "朝暮", note: "解析层联调完了" }]);
+    expect(projects).toEqual([{ title: "日程秘书", note: "解析层联调完了" }]);
     expect(waitings.map((w) => w.text)).toEqual(["等房东答复"]);
     expect(out.proposedTasks).toEqual([]);
   });
@@ -75,6 +75,18 @@ describe("routeParseResult", () => {
     expect(events).toEqual([]);
     expect(out.proposedTasks).toEqual([
       { title: "明天下午三点前交稿", reason: undefined, when: "later", priority: "high", due: "2026-09-07", project: "接私活" },
+    ] satisfies ProposedTodo[]);
+  });
+
+  it("estimate/reason 透传到待确认任务", async () => {
+    const { deps } = makeDeps();
+    const r = {
+      ...emptyParseResult(),
+      tasks: [{ title: "去银行办房贷", reason: "利率要重签", estimate: 90, project: "搬家" }],
+    };
+    const out = await routeParseResult(r, OPTS, deps);
+    expect(out.proposedTasks).toEqual([
+      { title: "去银行办房贷", reason: "利率要重签", when: "later", priority: undefined, due: undefined, estimate: 90, project: "搬家" },
     ] satisfies ProposedTodo[]);
   });
 

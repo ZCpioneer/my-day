@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.zhaomu.app",
-  appName: "朝暮",
+  appId: "com.aisecretary.app",
+  appName: "AI 日程秘书",
   webDir: "dist",
   android: { allowMixedContent: false },
   plugins: {

@@ -17,7 +17,7 @@ export function shouldGreet(chat: DayChat): boolean {
 
 export function sessionTranscript(messages: DayChat["messages"]): string {
   if (messages.length === 0) return "（当前这段没有对话）";
-  return messages.map((m) => `${m.role === "user" ? "我" : "朝暮"}：${m.content}`).join("\n");
+  return messages.map((m) => `${m.role === "user" ? "我" : "秘书"}：${m.content}`).join("\n");
 }
 
 export function dayTranscript(chat: DayChat): string {

@@ -17,7 +17,8 @@
       <div class="box">{{ done ? "✓" : "" }}</div>
       <div>
         <p>{{ todo.title }}</p>
-        <p v-if="meta" class="todo-meta">{{ meta }}</p>
+        <p v-if="todo.reason" class="todo-why">{{ todo.reason }}</p>
+        <p v-if="meta" class="todo-meta" :class="{ hot: todo.priority === 'high', overdue }">{{ meta }}</p>
       </div>
     </div>
   </div>
@@ -27,7 +28,7 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { localDate } from "@/dates";
 import { HOLD_MS, movementCancelsHold } from "@/todo-drag";
-import { todoMeta } from "@/todo-meta";
+import { isOverdue, todoMeta } from "@/todo-meta";
 import type { Todo } from "@/types";
 
 const BTN_W = 76;
@@ -41,8 +42,12 @@ const props = defineProps<{
 }>();
 
 const meta = computed(() =>
-  todoMeta({ priority: props.todo.priority, due: props.todo.due, project: props.projectTitle }, localDate()),
+  todoMeta(
+    { priority: props.todo.priority, due: props.todo.due, estimate: props.todo.estimate, project: props.projectTitle },
+    localDate(),
+  ),
 );
+const overdue = computed(() => isOverdue(props.todo.due, localDate()));
 const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];

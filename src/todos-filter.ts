@@ -1,22 +1,5 @@
-import type { ProposedTodo, Todo } from "./types";
-
-function norm(s: string): string {
-  return s.replace(/\s+/g, "").toLowerCase();
-}
-
-export function filterProposedTodos(proposed: ProposedTodo[], existing: Todo[]): ProposedTodo[] {
-  const seen = new Set(existing.map((t) => norm(t.title)));
-  const out: ProposedTodo[] = [];
-  for (const p of proposed) {
-    const title = p.title.trim();
-    if (!title) continue;
-    const key = norm(title);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ title, reason: p.reason?.trim() || undefined, when: p.when === "today" ? "today" : "later" });
-  }
-  return out;
-}
+import { normKey } from "./norm";
+import type { ProposedTodo } from "./types";
 
 export function filterTodayPlanItems(proposed: ProposedTodo[]): ProposedTodo[] {
   const seen = new Set<string>();
@@ -24,7 +7,7 @@ export function filterTodayPlanItems(proposed: ProposedTodo[]): ProposedTodo[] {
   for (const p of proposed) {
     const title = p.title.trim();
     if (!title) continue;
-    const key = norm(title);
+    const key = normKey(title);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ title, reason: p.reason?.trim() || undefined, when: "today" });
@@ -44,7 +27,7 @@ function asPlanBucket(raw: unknown, when: "today" | "later"): ProposedTodo[] {
     if (typeof title !== "string") continue;
     const trimmed = title.trim();
     if (!trimmed) continue;
-    const key = norm(trimmed);
+    const key = normKey(trimmed);
     if (seen.has(key)) continue;
     seen.add(key);
     const reason = (it as { reason?: unknown }).reason;
@@ -63,12 +46,12 @@ export function filterPlanItems(raw: unknown): { today: ProposedTodo[]; later: P
   if (!raw || typeof raw !== "object") return { today: [], later: [] };
   const obj = raw as { today?: unknown; later?: unknown; items?: unknown };
   const today = asPlanBucket(obj.today ?? obj.items, "today");
-  const todayNorm = new Set(today.map((t) => norm(t.title)));
-  const later = asPlanBucket(obj.later, "later").filter((t) => !todayNorm.has(norm(t.title)));
+  const todayNorm = new Set(today.map((t) => normKey(t.title)));
+  const later = asPlanBucket(obj.later, "later").filter((t) => !todayNorm.has(normKey(t.title)));
   if (today.length <= MAX_TODAY_PLAN) return { today, later };
   const kept = today.slice(0, MAX_TODAY_PLAN);
   const spilled = today.slice(MAX_TODAY_PLAN).map((t) => ({ ...t, when: "later" as const }));
-  const laterNorm = new Set(later.map((t) => norm(t.title)));
-  const extra = spilled.filter((t) => !laterNorm.has(norm(t.title)));
+  const laterNorm = new Set(later.map((t) => normKey(t.title)));
+  const extra = spilled.filter((t) => !laterNorm.has(normKey(t.title)));
   return { today: kept, later: [...extra, ...later] };
 }

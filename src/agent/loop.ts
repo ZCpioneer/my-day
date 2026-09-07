@@ -1,10 +1,11 @@
 import type { ApiMessage, ChatCompletionRequest, ChatCompletionResponse, ToolCall } from "@/api/deepseek";
 import { localDate } from "@/dates";
 import { debugLog } from "@/debug/log";
+import { normKey } from "@/norm";
 import { filterTodayPlanItems } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
 import type { ChatMessage, ChatMode, DailyLog, ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
-import { buildContextMessages } from "./context";
+import { buildContextMessages, formatBucket } from "./context";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
 
@@ -14,6 +15,8 @@ export interface AgentDeps {
   complete: (req: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
   listTodos: () => Promise<Todo[]>;
   setTodayPlan: (items: ProposedTodo[]) => Promise<void>;
+  /** propose_todos 确认后落库（进「以后」）。 */
+  addTodos: (items: ProposedTodo[]) => Promise<void>;
   now: () => Date;
   onPropose: (items: ProposedTodo[], kind: "later" | "today") => Promise<ProposedTodo[]>;
 }
@@ -49,14 +52,32 @@ function asProposedItems(raw: unknown): ProposedTodo[] | undefined {
   return out;
 }
 
-function formatBucket(label: string, todos: Todo[]): string {
-  if (todos.length === 0) return `${label} 0 件`;
-  return `${label} ${todos.length} 件：${todos.map((t) => t.title).join("；")}`;
+/** propose_todos 的完整字段校验；任何一条坏条目整体作废（模型重试比半截落库好）。 */
+function asProposedTodos(raw: unknown): ProposedTodo[] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const items = (raw as { items?: unknown }).items;
+  if (!Array.isArray(items)) return undefined;
+  const out: ProposedTodo[] = [];
+  for (const it of items) {
+    if (!it || typeof it !== "object") return undefined;
+    const o = it as Record<string, unknown>;
+    if (typeof o.title !== "string" || !o.title.trim()) return undefined;
+    const estimate = o.estimate;
+    out.push({
+      title: o.title.trim(),
+      reason: typeof o.reason === "string" ? o.reason : undefined,
+      priority: o.priority === "high" ? "high" : o.priority === "normal" ? "normal" : undefined,
+      due: typeof o.due === "string" ? o.due : undefined,
+      estimate: typeof estimate === "number" && Number.isFinite(estimate) && estimate > 0 ? Math.round(estimate) : undefined,
+      project: typeof o.project === "string" && o.project.trim() ? o.project.trim() : undefined,
+    });
+  }
+  return out;
 }
 
 function formatTodos(todos: Todo[], date: string): string {
   const { today, later, doneToday } = partitionTodos(todos, date);
-  return `${formatBucket("今天", today)}。${formatBucket("以后", later)}。${formatBucket("今日已完成", doneToday)}。`;
+  return formatBucket("今天", today, date) + formatBucket("以后", later, date) + formatBucket("今日已完成", doneToday, date);
 }
 
 async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
@@ -67,6 +88,33 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
   if (name === "list_todos") {
     const todos = await deps.listTodos();
     return formatTodos(todos, localDate(deps.now()));
+  }
+
+  if (name === "propose_todos") {
+    const items = asProposedTodos(parsed);
+    if (!items) return "参数无效";
+    const existing = new Set((await deps.listTodos()).map((t) => normKey(t.title)));
+    const valid = items.filter((i) => {
+      const k = normKey(i.title);
+      if (!k || existing.has(k)) return false;
+      existing.add(k);
+      return true;
+    });
+    if (valid.length === 0) return "这些事待办里已经有了，不用重复记";
+    debugLog.push({
+      event: "propose_ui",
+      tool: "propose_todos",
+      detail: valid.map((v) => v.title).join("、"),
+    });
+    const accepted = await deps.onPropose(valid, "later");
+    if (accepted.length === 0) {
+      debugLog.push({ event: "todo_rejected", tool: "propose_todos", detail: "用户这次不加" });
+      return "用户这次不加";
+    }
+    await deps.addTodos(accepted);
+    const titles = accepted.map((a) => a.title).join("、");
+    debugLog.push({ event: "todo_confirmed", tool: "propose_todos", detail: titles });
+    return `用户已确认记下：${titles}`;
   }
 
   if (name === "set_today_plan") {

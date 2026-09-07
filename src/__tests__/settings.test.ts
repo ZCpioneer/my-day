@@ -19,11 +19,10 @@ const prefs = {
 };
 
 describe("settings", () => {
-  it("defaults model and debug overlay", async () => {
+  it("defaults model and split hour", async () => {
     mem.clear();
     const s = await loadSettings(prefs);
     expect(s.model).toBe(DEFAULT_MODEL);
-    expect(s.debugOverlay).toBe(false);
     expect(s.apiKey).toBe("");
     expect(s.daySplitHour).toBe(12);
   });
@@ -31,13 +30,12 @@ describe("settings", () => {
   it("roundtrips", async () => {
     mem.clear();
     await saveSettings(
-      { apiKey: "sk-user", model: "deepseek-v4-pro", debugOverlay: false, daySplitHour: 18 },
+      { apiKey: "sk-user", model: "deepseek-v4-pro", daySplitHour: 18 },
       prefs,
     );
     const s = await loadSettings(prefs);
     expect(s.apiKey).toBe("sk-user");
     expect(s.model).toBe("deepseek-v4-pro");
-    expect(s.debugOverlay).toBe(false);
     expect(s.daySplitHour).toBe(18);
   });
 });
@@ -46,7 +44,7 @@ describe("effectiveApiKey", () => {
   it("uses settings then default", () => {
     expect(
       effectiveApiKey(
-        { apiKey: "", model: DEFAULT_MODEL, debugOverlay: true, daySplitHour: 12 },
+        { apiKey: "", model: DEFAULT_MODEL, daySplitHour: 12 },
         "sk-debug",
       ),
     ).toBe("sk-debug");
@@ -63,9 +61,9 @@ describe("collapsedGroups", () => {
 
   it("损坏内容回退空数组", async () => {
     mem.clear();
-    mem.set("zhaomu.collapsed-groups", "{oops");
+    mem.set("ai-secretary.collapsed-groups", "{oops");
     expect(await loadCollapsedGroups(prefs)).toEqual([]);
-    mem.set("zhaomu.collapsed-groups", "[1,2]");
+    mem.set("ai-secretary.collapsed-groups", "[1,2]");
     expect(await loadCollapsedGroups(prefs)).toEqual([]);
   });
 });

@@ -5,7 +5,7 @@ import { PARSE_CORPUS } from "@/agent/parse-corpus";
 import { scoreCase } from "@/agent/parse-eval";
 
 const key = process.env.DEEPSEEK_API_KEY ?? "";
-const model = process.env.ZHAOMU_EVAL_MODEL ?? "deepseek-v4-flash";
+const model = process.env.EVAL_MODEL ?? "deepseek-v4-flash";
 
 const postJson = async (url: string, headers: Record<string, string>, body: unknown) => {
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
@@ -22,6 +22,7 @@ describe.skipIf(!key)("解析语料 eval（真实 API，需 DEEPSEEK_API_KEY 环
         todos: [],
         projects: [],
         model,
+        recent: c.context,
         complete: (req) => chatCompletions({ apiKey: key, request: req, postJson }),
       });
       const score = scoreCase(c, result);

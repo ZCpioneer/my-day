@@ -5,7 +5,7 @@ import { resolveApiKey } from "../keys";
 import { DEFAULT_DEBUG_KEY } from "../debug/default-key";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR } from "../ritual";
 
-const KEY = "zhaomu.settings";
+const KEY = "ai-secretary.settings";
 
 export interface Prefs {
   get(key: string): Promise<string | null>;
@@ -38,13 +38,12 @@ function defaultPrefs(): Prefs {
 export async function loadSettings(prefs: Prefs = defaultPrefs()): Promise<Settings> {
   const raw = await prefs.get(KEY);
   if (!raw) {
-    return { apiKey: "", model: DEFAULT_MODEL, debugOverlay: false, daySplitHour: DEFAULT_SPLIT_HOUR };
+    return { apiKey: "", model: DEFAULT_MODEL, daySplitHour: DEFAULT_SPLIT_HOUR };
   }
   const parsed = JSON.parse(raw) as Partial<Settings>;
   return {
     apiKey: parsed.apiKey ?? "",
     model: parsed.model || DEFAULT_MODEL,
-    debugOverlay: parsed.debugOverlay ?? false,
     daySplitHour: clampSplitHour(parsed.daySplitHour ?? DEFAULT_SPLIT_HOUR),
   };
 }
@@ -57,7 +56,7 @@ export function effectiveApiKey(s: Settings, fallback: string = DEFAULT_DEBUG_KE
   return resolveApiKey(s.apiKey, fallback);
 }
 
-const COLLAPSED_KEY = "zhaomu.collapsed-groups";
+const COLLAPSED_KEY = "ai-secretary.collapsed-groups";
 
 /** 「以后」栏各分区的折叠状态（组 id 列表；未分组区用空串）。 */
 export async function loadCollapsedGroups(prefs: Prefs = defaultPrefs()): Promise<string[]> {

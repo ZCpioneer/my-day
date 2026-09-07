@@ -9,6 +9,7 @@ function deps(over: Partial<AgentDeps> & { complete: AgentDeps["complete"] }): A
   return {
     listTodos: async () => [],
     setTodayPlan: async () => {},
+    addTodos: async () => {},
     now: () => new Date(2026, 8, 5, 8, 0, 0),
     onPropose: async (items) => items,
     ...over,
@@ -25,8 +26,48 @@ describe("runAgent", () => {
     expect(r.stopped).toBe(false);
   });
 
-  it("propose_todos 已移除：调用返回未知工具", async () => {
+  it("propose_todos 确认后经 addTodos 落库，字段全带上", async () => {
     debugLog.clear();
+    const added: string[] = [];
+    let calls = 0;
+    const d = deps({
+      complete: async (): Promise<ChatCompletionResponse> => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            content: null,
+            tool_calls: [
+              {
+                id: "c1",
+                type: "function",
+                function: {
+                  name: "propose_todos",
+                  arguments: JSON.stringify({
+                    items: [
+                      { title: "写脚本", project: "AI视频", estimate: 60, priority: "high", due: "2026-09-10", reason: "先做内容" },
+                      { title: "生成画面", project: "AI视频" },
+                    ],
+                  }),
+                },
+              },
+            ],
+          };
+        }
+        return { content: "已提议，等你确认。", tool_calls: [] };
+      },
+      addTodos: async (items) => {
+        added.push(...items.map((i) => `${i.title}|${i.project}|${i.estimate}|${i.priority}|${i.due}|${i.reason}`));
+      },
+    });
+    const r = await runAgent({ deps: d, mode: "chat", userText: "拆成两步：先写脚本，再生成画面", history: [], model: "deepseek-v4-flash" });
+    expect(added).toEqual(["写脚本|AI视频|60|high|2026-09-10|先做内容", "生成画面|AI视频|undefined|undefined|undefined|undefined"]);
+    const result = debugLog.entries.find((e) => e.event === "tool_result" && e.tool === "propose_todos");
+    expect(result?.detail).toContain("用户已确认记下：写脚本、生成画面");
+    expect(r.assistantText).toBe("已提议，等你确认。");
+  });
+
+  it("propose_todos 被拒绝时不落库", async () => {
+    const added: string[] = [];
     let calls = 0;
     const d = deps({
       complete: async (): Promise<ChatCompletionResponse> => {
@@ -43,13 +84,45 @@ describe("runAgent", () => {
             ],
           };
         }
-        return { content: "好。", tool_calls: [] };
+        return { content: "好，那先不记。", tool_calls: [] };
+      },
+      onPropose: async () => [],
+      addTodos: async (items) => {
+        added.push(...items.map((i) => i.title));
       },
     });
-    const r = await runAgent({ deps: d, mode: "chat", userText: "还要给房东转水电费", history: [], model: "deepseek-v4-flash" });
+    await runAgent({ deps: d, mode: "chat", userText: "还要给房东转水电费", history: [], model: "deepseek-v4-flash" });
+    expect(added).toEqual([]);
+  });
+
+  it("propose_todos 跳过与现有待办重复的标题", async () => {
+    debugLog.clear();
+    let calls = 0;
+    const d = deps({
+      listTodos: async (): Promise<Todo[]> => [
+        { id: "1", title: "给房东转水电费", status: "open", sourceDate: "2026-09-05", createdAt: "2026-09-05T01:00:00.000Z" },
+      ],
+      complete: async (): Promise<ChatCompletionResponse> => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            content: null,
+            tool_calls: [
+              {
+                id: "c1",
+                type: "function",
+                function: { name: "propose_todos", arguments: JSON.stringify({ items: [{ title: "给房东转水电费" }] }) },
+              },
+            ],
+          };
+        }
+        return { content: "已经有了。", tool_calls: [] };
+      },
+    });
+    const r = await runAgent({ deps: d, mode: "chat", userText: "记一下给房东转水电费", history: [], model: "deepseek-v4-flash" });
     const result = debugLog.entries.find((e) => e.event === "tool_result" && e.tool === "propose_todos");
-    expect(result?.detail).toBe("未知工具");
-    expect(r.assistantText).toBe("好。");
+    expect(result?.detail).toContain("已经有了");
+    expect(r.stopped).toBe(false);
   });
 
   it("stops after MAX_MODEL_CALLS", async () => {
@@ -100,7 +173,6 @@ describe("runAgent", () => {
       model: "deepseek-v4-flash",
       planConfirmed: true,
     });
-    expect(debugLog.entries.find((e) => e.event === "log_written")).toBeUndefined();
     expect(r.stopped).toBe(true);
   });
 

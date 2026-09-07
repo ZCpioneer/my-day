@@ -1,4 +1,4 @@
-package com.zhaomu.app;
+package com.aisecretary.app;
 
 import com.getcapacitor.BridgeActivity;
 

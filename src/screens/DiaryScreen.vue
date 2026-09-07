@@ -3,39 +3,29 @@
     <div class="diary-scroll">
       <div class="diary-head">
         <h2>日记</h2>
-        <div class="count">只记今天</div>
+        <div class="count">记每一天</div>
       </div>
       <div v-if="!daily" class="empty">
-        <div class="glyph">暮</div>
+        <div class="glyph">晚</div>
         <p>点下面「整理成日记」。今天不整的话，明天打开会补上昨天。</p>
       </div>
-      <div v-else class="log-card">
-        <div class="log-core">
-          <h3>{{ dateLabel }}</h3>
-          <div class="log-block">
-            <div class="lab">早计划</div>
-            <p>{{ daily.plan }}</p>
-          </div>
-          <div class="log-block">
-            <div class="lab">做成了</div>
-            <ul>
-              <li v-for="(t, i) in daily.done" :key="'d' + i">{{ t }}</li>
-              <li v-if="daily.done.length === 0">还没有勾掉的。</li>
-            </ul>
-          </div>
-          <div class="log-block">
-            <div class="lab">没做完</div>
-            <ul>
-              <li v-for="(t, i) in daily.undone" :key="'u' + i">{{ t }}</li>
-              <li v-if="daily.undone.length === 0">全部勾完了。</li>
-            </ul>
-          </div>
-          <div class="log-block">
-            <div class="lab">状态</div>
-            <div class="mood">{{ daily.state }}</div>
-          </div>
+      <LogCard v-else :log="daily" />
+      <template v-if="pastLogs.length > 0">
+        <div class="section-label">以往</div>
+        <div v-for="log in pastLogs" :key="log.date" class="log-day">
+          <button
+            type="button"
+            class="log-day-head"
+            :data-log-day="log.date"
+            :aria-expanded="openDates.has(log.date)"
+            @click="toggleDay(log.date)"
+          >
+            <span>{{ dayLabel(log.date) }}</span>
+            <span class="log-day-arrow">{{ openDates.has(log.date) ? "收起" : "展开" }}</span>
+          </button>
+          <LogCard v-if="openDates.has(log.date)" :log="log" bare />
         </div>
-      </div>
+      </template>
     </div>
     <div class="diary-compose">
       <button
@@ -52,19 +42,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref } from "vue";
+import LogCard from "@/components/LogCard.vue";
+import { dayLabel } from "@/dates";
 import type { DailyLog } from "@/types";
 
-const props = defineProps<{
+defineProps<{
   daily: DailyLog | null;
-  date: string;
+  pastLogs: DailyLog[];
   composing?: boolean;
 }>();
 
 const emit = defineEmits<{ compose: [] }>();
 
-const dateLabel = computed(() => {
-  const parts = props.date.split("-");
-  return `${Number(parts[1])}月${Number(parts[2])}日`;
-});
+const openDates = ref(new Set<string>());
+
+function toggleDay(date: string) {
+  const next = new Set(openDates.value);
+  if (next.has(date)) next.delete(date);
+  else next.add(date);
+  openDates.value = next;
+}
 </script>

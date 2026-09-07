@@ -1,5 +1,6 @@
 import type { ApiMessage } from "@/api/deepseek";
 import { normKey } from "@/norm";
+import { todoMeta } from "@/todo-meta";
 import { isChitchat } from "./parse";
 import type {
   ChatMessage,
@@ -20,13 +21,22 @@ function modeLabel(mode: ChatMode): string {
   return "整理今日待办";
 }
 
-function titles(todos: Todo[]): string {
-  return todos.map((t) => t.title).join("；");
+/** 每条待办带属性：急 / 截止 / 约多久 / 属于哪摊事，模型追问才有依据。 */
+function titles(todos: Todo[], today: string, projectTitles?: Map<string, string>): string {
+  return todos
+    .map((t) => {
+      const meta = todoMeta(
+        { priority: t.priority, due: t.due, estimate: t.estimate, project: t.projectId ? projectTitles?.get(t.projectId) : undefined },
+        today,
+      );
+      return meta ? `${t.title}（${meta}）` : t.title;
+    })
+    .join("；");
 }
 
-function formatBucket(label: string, todos: Todo[]): string {
+export function formatBucket(label: string, todos: Todo[], today?: string, projectTitles?: Map<string, string>): string {
   if (todos.length === 0) return `${label} 0 件。`;
-  return `${label} ${todos.length} 件：${titles(todos)}。`;
+  return `${label} ${todos.length} 件：${titles(todos, today ?? "", projectTitles)}。`;
 }
 
 function formatYesterdayLog(log: DailyLog): string {
@@ -85,13 +95,14 @@ export function buildContextMessages(input: {
   parseResult?: ParseResult | null;
   recentEvents?: TimelineEvent[];
 }): ApiMessage[] {
+  const projectTitles = new Map((input.projects ?? []).map((p) => [p.id, p.title]));
   const facts = [
     `今天是 ${input.date}，${input.timeLabel}。当前模式：${modeLabel(input.mode)}。`,
     input.planConfirmed ? "今天已经确认过今日计划。" : "今天还没有确认过今日计划。",
     input.yesterdayLog ? formatYesterdayLog(input.yesterdayLog) : "",
-    formatBucket("今天", input.todayTodos),
-    formatBucket("以后", input.laterTodos),
-    formatBucket("今日已完成", input.doneToday),
+    formatBucket("今天", input.todayTodos, input.date, projectTitles),
+    formatBucket("以后", input.laterTodos, input.date, projectTitles),
+    formatBucket("今日已完成", input.doneToday, input.date, projectTitles),
     formatProjects(input.projects ?? []),
     formatWaitings(input.waitings ?? []),
     formatEvents(selectRelevantEvents(input.recentEvents ?? [], input.parseResult, input.date)),

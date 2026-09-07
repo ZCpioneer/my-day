@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatCompletionResponse } from "@/api/deepseek";
+import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
 import { debugLog } from "@/debug/log";
 import { asParseResult, emptyParseResult, isChitchat, parseInput, parseSystemPrompt } from "@/agent/parse";
 
@@ -20,7 +20,7 @@ describe("asParseResult", () => {
         { title: "坏优先级", priority: "urgent" },
         "不是对象",
       ],
-      projectUpdates: [{ project: "朝暮", note: "解析层联调完了", status: "active" }, { note: "没项目名" }],
+      projectUpdates: [{ project: "日程秘书", note: "解析层联调完了", status: "active" }, { note: "没项目名" }],
       waitings: [{ text: "等房东答复", waitingOn: "房东" }, { waitingOn: "没文本" }],
       waitingsResolved: ["房东答复了", 1],
     });
@@ -30,9 +30,24 @@ describe("asParseResult", () => {
       { title: "明天下午三点前交稿", reason: undefined, priority: "high", due: "2026-09-07", project: "接私活" },
       { title: "坏优先级", reason: undefined, priority: undefined, due: undefined, project: undefined },
     ]);
-    expect(r.projectUpdates).toEqual([{ project: "朝暮", note: "解析层联调完了", status: "active" }]);
+    expect(r.projectUpdates).toEqual([{ project: "日程秘书", note: "解析层联调完了", status: "active" }]);
     expect(r.waitings).toEqual([{ text: "等房东答复", waitingOn: "房东" }]);
     expect(r.waitingsResolved).toEqual(["房东答复了"]);
+  });
+
+  it("estimate 只收正数，非法值丢弃", () => {
+    const r = asParseResult({
+      tasks: [
+        { title: "去银行", estimate: 90 },
+        { title: "半小时的", estimate: 30.4 },
+        { title: "负数", estimate: -5 },
+        { title: "字符串", estimate: "一小时" },
+      ],
+    });
+    expect(r.tasks[0].estimate).toBe(90);
+    expect(r.tasks[1].estimate).toBe(30);
+    expect(r.tasks[2].estimate).toBeUndefined();
+    expect(r.tasks[3].estimate).toBeUndefined();
   });
 });
 
@@ -54,6 +69,40 @@ describe("parseSystemPrompt", () => {
 });
 
 describe("parseInput", () => {
+  it("带 recent 时把最近对话写进用户内容，并标注只是上下文", async () => {
+    let seen = "";
+    const complete = async (req: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+      seen = String(req.messages[1]?.content ?? "");
+      return { content: "{}", tool_calls: [] };
+    };
+    await parseInput({
+      text: "装修那摊",
+      date: "2026-09-06",
+      todos: [],
+      projects: [],
+      model: "m",
+      recent: [
+        { role: "user", content: "下周要买瓷砖" },
+        { role: "assistant", content: "这属于哪摊事？" },
+      ],
+      complete,
+    });
+    expect(seen).toContain("最近对话");
+    expect(seen).toContain("用户：下周要买瓷砖");
+    expect(seen).toContain("秘书：这属于哪摊事？");
+    expect(seen).toContain("用户刚说：「装修那摊」");
+  });
+
+  it("不带 recent 时不出现上下文段落", async () => {
+    let seen = "";
+    const complete = async (req: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+      seen = String(req.messages[1]?.content ?? "");
+      return { content: "{}", tool_calls: [] };
+    };
+    await parseInput({ text: "hi", date: "2026-09-06", todos: [], projects: [], model: "m", complete });
+    expect(seen).not.toContain("最近对话");
+  });
+
   it("成功时返回解析结果", async () => {
     const complete = async (): Promise<ChatCompletionResponse> => ({
       content:

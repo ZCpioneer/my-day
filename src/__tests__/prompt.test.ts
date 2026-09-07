@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { KICKOFF_TEXT, systemPrompt, tidyPlanPrompt, TIDY_USER_TEXT } from "@/agent/prompt";
+import { KICKOFF_TEXT, systemPrompt, tidyPlanPrompt } from "@/agent/prompt";
 
 describe("systemPrompt", () => {
   it("defines proactive duties: use yesterday's diary, advise on load, ask one question", () => {
@@ -12,9 +12,17 @@ describe("systemPrompt", () => {
 
   it("keeps the hard rules: only propose, no diary, stop after confirm", () => {
     const p = systemPrompt();
-    expect(p).toContain("不得声称已经写入");
+    expect(p).toContain("不得口头声称已经记下");
+    expect(p).toContain("propose_todos");
     expect(p).toContain("不要写日记");
     expect(p).toContain("本段对话即告结束");
+  });
+
+  it("引导归类：默认问拆分、小事问归属、独立不追问", () => {
+    const p = systemPrompt();
+    expect(p).toContain("拆成哪几步");
+    expect(p).toContain("属于哪摊事");
+    expect(p).toContain("独立的事");
   });
 });
 
@@ -32,11 +40,5 @@ describe("tidyPlanPrompt", () => {
     expect(p).toContain("today");
     expect(p).toContain("later");
     expect(p).toContain("一天做不了太多");
-  });
-});
-
-describe("TIDY_USER_TEXT", () => {
-  it("asks to reorganize both today and later from the whole session", () => {
-    expect(TIDY_USER_TEXT).toBe("请根据本段全部对话，把今天和以后的待办一起重新整理。");
   });
 });

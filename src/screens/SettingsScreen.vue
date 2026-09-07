@@ -17,7 +17,7 @@
         </select>
       </label>
       <label class="field">
-        <span>朝暮分界（小时）</span>
+        <span>早晚分界（小时）</span>
         <input v-model.number="draft.daySplitHour" type="number" min="0" max="23" step="1" />
         <p class="hint">给对话一点时间感（现在像早上还是晚上）。自动整理确认后会清空这段对话。日记在日记页。默认 12。</p>
       </label>

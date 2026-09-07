@@ -682,6 +682,17 @@ html.native .phone {
   border-radius: 24px;
   background: rgba(255,255,255,0.03);
 }
+.log-card--bare {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.log-card--bare .log-core {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 12px 14px 6px;
+}
 .log-core {
   background: #221c16;
   border-radius: 20px;
@@ -707,6 +718,28 @@ html.native .phone {
   color: var(--paper-dim);
 }
 .log-block ul { padding-left: 1.1em; }
+.log-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.log-day-head {
+  border: 0;
+  background: var(--panel);
+  color: var(--paper-dim);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.log-day-head:active { filter: brightness(1.2); }
+.log-day-arrow { font-size: 11px; color: var(--mute); }
 .mood {
   margin-top: 4px;
   padding: 10px 12px;
@@ -834,6 +867,57 @@ html.native .phone {
   opacity: 0.6;
   margin-left: 6px;
 }
+.todo-meta.hot { color: var(--dawn); opacity: 1; }
+.todo-meta.overdue { color: #e06c5a; opacity: 1; }
+.todo-why {
+  display: block;
+  font-size: 12px;
+  color: var(--paper-dim);
+  opacity: 0.75;
+  margin-top: 2px;
+}
+.todo-pick-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.todo-pick-row .todo-pick { flex: 1; min-width: 0; }
+.todo-pick .todo-meta { display: block; margin-left: 0; margin-top: 2px; }
+.todo-adjust {
+  border: 0;
+  background: none;
+  color: var(--paper-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 10px 4px 0;
+  flex-shrink: 0;
+}
+.todo-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 2px 4px 10px 26px;
+  font-size: 12px;
+  color: var(--paper-dim);
+}
+.todo-edit-field { display: flex; align-items: center; gap: 5px; }
+.todo-edit select,
+.todo-edit input[type="date"],
+.todo-edit input[type="number"],
+.todo-edit-new {
+  font: inherit;
+  color: var(--paper);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 4px 6px;
+  max-width: 150px;
+}
+.todo-edit input[type="number"] { width: 64px; }
+.todo-edit input[type="checkbox"] { accent-color: var(--dawn); }
+.todo-edit-hot input { accent-color: var(--dawn); }
 
 .group-menu {
   border: 0;

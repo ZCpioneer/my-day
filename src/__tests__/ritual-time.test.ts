@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildContextMessages } from "@/agent/context";
-import { clampSplitHour, ritualForHour, sessionMessages, sessionOf } from "@/ritual";
+import { clampSplitHour, ritualForHour } from "@/ritual";
 import type { ChatMessage, Todo } from "@/types";
 
 describe("ritualForHour", () => {
@@ -19,36 +19,6 @@ describe("ritualForHour", () => {
   it("clamps split hour", () => {
     expect(clampSplitHour(-3)).toBe(0);
     expect(clampSplitHour(30)).toBe(23);
-  });
-});
-
-describe("sessionMessages", () => {
-  const morning: ChatMessage = {
-    id: "1",
-    role: "user",
-    content: "开始今天。",
-    createdAt: "2026-09-05T01:00:00.000Z",
-    mode: "morning",
-  };
-  const evening: ChatMessage = {
-    id: "2",
-    role: "user",
-    content: "今天结束了。",
-    createdAt: "2026-09-05T14:00:00.000Z",
-    mode: "evening",
-  };
-  const leftover: ChatMessage = {
-    id: "3",
-    role: "user",
-    content: "白天随口说",
-    createdAt: "2026-09-05T03:00:00.000Z",
-    mode: "chat",
-  };
-
-  it("keeps untagged chat in morning so it does not leak into evening", () => {
-    expect(sessionOf(leftover)).toBe("morning");
-    expect(sessionMessages([morning, leftover, evening], "evening").map((m) => m.id)).toEqual(["2"]);
-    expect(sessionMessages([morning, leftover, evening], "morning").map((m) => m.id)).toEqual(["1", "3"]);
   });
 });
 

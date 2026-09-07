@@ -25,16 +25,20 @@ export interface Todo {
   createdAt: string;
   completedAt?: string;
   fromMessageId?: string;
-  /** Missing means today, so old rows stay on today's list. */
+  /** 缺失视为 today。 */
   when?: "today" | "later";
-  /** 桶内手动排位；缺失时按 createdAt 兜底（兼容旧数据）。 */
+  /** 桶内手动排位；缺失时按 createdAt 兜底。 */
   order?: number;
-  /** 缺失 = normal（兼容旧数据）。 */
+  /** 缺失 = normal。 */
   priority?: "high" | "normal";
   /** ISO 日期或日期时间，可选。 */
   due?: string;
   /** 关联项目 id，可选。 */
   projectId?: string;
+  /** 为什么做，来自解析层，可选。 */
+  reason?: string;
+  /** 预估耗时（分钟），可选。 */
+  estimate?: number;
 }
 
 export interface DailyLog {
@@ -49,8 +53,7 @@ export interface DailyLog {
 export interface Settings {
   apiKey: string;
   model: string;
-  debugOverlay: boolean;
-  /** 0–23. Hours before this are 朝; this hour and after are 暮. */
+  /** 0–23，早晚分界小时：此小时之前算「早」，起算「晚」。 */
   daySplitHour: number;
 }
 
@@ -63,7 +66,6 @@ export type DebugEvent =
   | "propose_ui"
   | "todo_confirmed"
   | "todo_rejected"
-  | "log_written"
   | "agent_stop"
   | "parse_fail";
 
@@ -84,6 +86,8 @@ export interface ProposedTodo {
   when?: "today" | "later";
   priority?: "high" | "normal";
   due?: string;
+  /** 预估耗时（分钟），可选。 */
+  estimate?: number;
   /** 项目标题，落库时解析成 projectId。 */
   project?: string;
 }
@@ -105,7 +109,7 @@ export interface Project {
   status: "active" | "done" | "paused";
   /** 最近进展。 */
   note?: string;
-  /** 组手动排位；缺失时按 createdAt 兜底（兼容旧数据）。 */
+  /** 组手动排位；缺失时按 createdAt 兜底。 */
   order?: number;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +132,8 @@ export interface ParsedTask {
   reason?: string;
   priority?: "high" | "normal";
   due?: string;
+  /** 预估耗时（分钟），可选。 */
+  estimate?: number;
   /** 项目标题，优先从现有项目里选。 */
   project?: string;
 }

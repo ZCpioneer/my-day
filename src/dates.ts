@@ -11,3 +11,9 @@ export function shiftLocalDate(iso: string, days: number): string {
   dt.setDate(dt.getDate() + days);
   return localDate(dt);
 }
+
+/** 「9月7日」式的短标签。 */
+export function dayLabel(iso: string): string {
+  const parts = iso.split("-");
+  return `${Number(parts[1])}月${Number(parts[2])}日`;
+}

@@ -48,7 +48,7 @@ describe("解析 → 确认 → 落库", () => {
       JSON.stringify({
         events: ["解析层联调完了"],
         decisions: [],
-        tasks: [{ title: "明天下午三点前交稿", priority: "high", due: "2099-01-02", project: "接私活" }],
+        tasks: [{ title: "明天下午三点前交稿", reason: "客户催得紧", priority: "high", due: "2099-01-02", estimate: 90, project: "接私活" }],
         projectUpdates: [{ project: "接私活", note: "快到截止了" }],
         waitings: [{ text: "等房东答复", waitingOn: "房东" }],
         waitingsResolved: [],
@@ -68,6 +68,8 @@ describe("解析 → 确认 → 落库", () => {
     expect(todos).toHaveLength(1);
     expect(todos[0].priority).toBe("high");
     expect(todos[0].due).toBe("2099-01-02");
+    expect(todos[0].reason).toBe("客户催得紧");
+    expect(todos[0].estimate).toBe(90);
     const projects = await projectRepo.list();
     expect(projects.map((p) => p.title)).toEqual(["接私活"]);
     expect(todos[0].projectId).toBe(projects[0].id);
@@ -133,6 +135,27 @@ describe("解析 → 确认 → 落库", () => {
     expect(w.text()).not.toContain("记到「以后」吗？");
     expect(await todoRepo.list()).toEqual([]);
     expect(await eventRepo.listRecent(1)).toEqual([]);
+  });
+
+  it("解析调用带最近对话上下文（承接秘书的引导提问）", async () => {
+    let parseUser = "";
+    vi.mocked(chatCompletions).mockImplementation(
+      async (args: { request: ChatCompletionRequest }): Promise<ChatCompletionResponse> => {
+        if (args.request.tools.length === 0) {
+          parseUser = String(args.request.messages[1]?.content ?? "");
+          return { content: "{}", tool_calls: [] };
+        }
+        return { content: "好。", tool_calls: [] };
+      },
+    );
+    const w = mount(App);
+    await waitFor(() => w.find("input").exists());
+    await w.get("input").setValue("装修那摊");
+    await w.get("button.send").trigger("click");
+    await waitFor(() => w.text().includes("好。"));
+    expect(parseUser).toContain("最近对话");
+    expect(parseUser).toContain("用户：早");
+    expect(parseUser).toContain("用户刚说：「装修那摊」");
   });
 
   it("解析失败（非 JSON）时对话照常", async () => {

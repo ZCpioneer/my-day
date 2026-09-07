@@ -67,3 +67,45 @@ describe("TodoConfirm 按组分组", () => {
     expect(w.emitted("confirm")?.[0]).toEqual([[{ title: "写稿子", when: "later", project: "发布会" }]]);
   });
 });
+
+describe("TodoConfirm 确认前调整", () => {
+  it("调整归属后重新分组，confirm 抛出改后的值", async () => {
+    const w = mount(TodoConfirm, {
+      props: { items: [{ title: "买纸箱", when: "later" }], existingProjects: ["搬家"] },
+    });
+    expect(w.find(".propose-sub").exists()).toBe(false);
+    await w.get(".todo-adjust").trigger("click");
+    await w.get(".todo-edit select").setValue("搬家");
+    expect(w.findAll(".propose-sub").map((el) => el.text())).toContain("搬家");
+    await w.get(".btn-yes").trigger("click");
+    expect(w.emitted("confirm")?.[0]).toEqual([[{ title: "买纸箱", when: "later", project: "搬家" }]]);
+  });
+
+  it("可改截止、耗时、急", async () => {
+    const w = mount(TodoConfirm, { props: { items: [{ title: "交稿", when: "later" }] } });
+    await w.get(".todo-adjust").trigger("click");
+    await w.get('.todo-edit input[type="date"]').setValue("2099-01-02");
+    await w.get('.todo-edit input[type="number"]').setValue(45);
+    await w.get('.todo-edit input[type="checkbox"]').setValue(true);
+    await w.get(".btn-yes").trigger("click");
+    expect(w.emitted("confirm")?.[0]).toEqual([
+      [{ title: "交稿", when: "later", due: "2099-01-02", estimate: 45, priority: "high" }],
+    ]);
+  });
+
+  it("选「＋ 新组…」后用文本输入的组名", async () => {
+    const w = mount(TodoConfirm, { props: { items: [{ title: "找房", when: "later" }], existingProjects: [] } });
+    await w.get(".todo-adjust").trigger("click");
+    await w.get(".todo-edit select").setValue("__new__");
+    await w.get(".todo-edit-new").setValue("搬家");
+    await w.get(".btn-yes").trigger("click");
+    expect(w.emitted("confirm")?.[0]).toEqual([[{ title: "找房", when: "later", project: "搬家" }]]);
+  });
+
+  it("候选带 reason 时显示在标题下", () => {
+    const w = mount(TodoConfirm, {
+      props: { items: [{ title: "去银行", when: "later", reason: "利率要重签" }] },
+    });
+    expect(w.get(".todo-why").text()).toBe("利率要重签");
+  });
+});

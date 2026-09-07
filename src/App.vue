@@ -1,7 +1,7 @@
 <template>
   <div class="phone">
     <header class="app-top">
-      <div class="brand">朝<span>暮</span></div>
+      <div class="brand">AI <span>日程秘书</span></div>
       <div class="when">
         <em>{{ dateLabel }}</em>
         <button type="button" class="gear" data-nav="settings" @click="tab = 'settings'">
@@ -45,7 +45,7 @@
       <DiaryScreen
         v-else-if="tab === 'diary'"
         :daily="daily"
-        :date="date"
+        :past-logs="pastLogs"
         :composing="composingDiary"
         @compose="onComposeDiary"
       />
@@ -94,7 +94,7 @@ import DiaryScreen from "@/screens/DiaryScreen.vue";
 import SettingsScreen from "@/screens/SettingsScreen.vue";
 import { shouldGreet } from "@/chat-session";
 import { catchUpDiary } from "@/diary";
-import { localDate, shiftLocalDate } from "@/dates";
+import { dayLabel, localDate, shiftLocalDate } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
 import { normKey } from "@/norm";
@@ -122,7 +122,6 @@ const tab = ref<Tab>("chat");
 const settings = ref<Settings>({
   apiKey: "",
   model: DEFAULT_MODEL,
-  debugOverlay: false,
   daySplitHour: DEFAULT_SPLIT_HOUR,
 });
 const todos = ref<Todo[]>([]);
@@ -131,6 +130,7 @@ const waitings = ref<Waiting[]>([]);
 const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
+const pastLogs = ref<DailyLog[]>([]);
 const pendingPropose = ref<ProposedTodo[] | null>(null);
 const proposeKind = ref<"later" | "today">("later");
 const awaiting = ref(false);
@@ -143,16 +143,17 @@ let dayTick: number | undefined;
 let closedThisTurn = false;
 let lastProposeSkipped = false;
 
-const dateLabel = computed(() => formatDateLabel(date.value));
-
-function formatDateLabel(iso: string): string {
-  const parts = iso.split("-");
-  return `${Number(parts[1])}月${Number(parts[2])}日`;
-}
+const dateLabel = computed(() => dayLabel(date.value));
 
 async function loadDay(d: string) {
   chat.value = await chatRepo.get(d);
   daily.value = await logRepo.get(d);
+  await refreshPastLogs();
+}
+
+async function refreshPastLogs() {
+  const all = await logRepo.list();
+  pastLogs.value = all.filter((l) => l.date !== date.value);
 }
 
 const ready = (async () => {
@@ -228,6 +229,8 @@ async function addTodos(items: ProposedTodo[]) {
       when: "later",
       priority: item.priority,
       due: item.due,
+      estimate: item.estimate,
+      reason: item.reason,
       projectId: await resolveProjectId(item.project),
     });
   }
@@ -268,6 +271,7 @@ const agentDeps: AgentDeps = {
   complete,
   listTodos: () => todoRepo.list(),
   setTodayPlan,
+  addTodos,
   now: () => new Date(),
   onPropose,
 };
@@ -321,6 +325,11 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
         todos: todos.value,
         projects: projects.value,
         model: settings.value.model,
+        // 最近几条对话做上下文：承接秘书的归类/拆分提问时才解析得对。
+        recent: history
+          .slice(-6)
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         complete,
       });
       const routed = await routeParseResult(parseResult, { date: date.value, messageId: userMsg.id }, routeDeps);
@@ -428,7 +437,10 @@ async function runCatchUp() {
           model: settings.value.model,
         }),
     });
-    if (wrote) catchUpNote.value = "已补上上次的日记";
+    if (wrote) {
+      catchUpNote.value = "已补上上次的日记";
+      await refreshPastLogs();
+    }
   } finally {
     catchUpRunning = false;
   }

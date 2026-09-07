@@ -1,9 +1,9 @@
 ---
 name: deploy-phone
-description: Use when 要把朝暮的最新构建推送或安装到用户的小米手机（推送到手机、打包发过去、装到手机、无线调试、adb install、assembleDebug、侧载 APK）
+description: Use when 要把 AI 日程秘书的最新构建推送或安装到用户的小米手机（推送到手机、打包发过去、装到手机、无线调试、adb install、assembleDebug、侧载 APK）
 ---
 
-# 推送到手机（朝暮 APK → 小米手机）
+# 推送到手机（AI 日程秘书 APK → 小米手机）
 
 ## 环境事实（这台 Mac + 用户的小米手机）
 
@@ -25,6 +25,7 @@ cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/
 ```
 
 - 三步可以串成一条后台命令一次跑完；第 2 步看到 `BUILD SUCCESSFUL`、第 3 步看到 `Performing Streamed Install` + `Success` 即成功。
+- 改名后 appId 已从 `com.zhaomu.app` 换成 `com.aisecretary.app`：手机上新旧两个应用会并存，旧「朝暮」的数据不互通；确认新应用没问题后可 `adb uninstall com.zhaomu.app` 删掉旧应用。
 - APK 产物：`android/app/build/outputs/apk/debug/app-debug.apk`（已被 .gitignore 忽略，不用管）。
 - 有多台设备时第 3 步加 `-s <设备名>`。
 
@@ -32,8 +33,8 @@ cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/
 
 ```bash
 # 确认包装上
-"$HOME/Library/Android/sdk/platform-tools/adb" shell pm list packages | grep zhaomu
-# → package:com.zhaomu.app
+"$HOME/Library/Android/sdk/platform-tools/adb" shell pm list packages | grep aisecretary
+# → package:com.aisecretary.app
 
 # 取本次构建时间戳（构建时由 vite define 注入，见 src/build-info.ts）
 grep -oE '"20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z"' android/app/src/main/assets/public/assets/index-*.js | head -1

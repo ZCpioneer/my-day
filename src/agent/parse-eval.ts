@@ -26,6 +26,13 @@ export function scoreCase(c: CorpusCase, r: ParseResult): ScoreResult {
   for (const e of c.expect.events ?? []) if (!hit(eventTexts, e)) misses.push(`缺 event:${e}`);
   for (const d of c.expect.decisions ?? []) if (!hit(decisionTexts, d)) misses.push(`缺 decision:${d}`);
   for (const w of c.expect.waitings ?? []) if (!hit(waitingTexts, w)) misses.push(`缺 waiting:${w}`);
+  const taskProjects = r.tasks.map((t) => normKey(t.project ?? "")).filter(Boolean);
+  for (const p of c.expect.projects ?? []) if (!hit(taskProjects, p)) misses.push(`缺 project:${p}`);
+  for (const e of c.expect.estimates ?? []) {
+    const t = r.tasks.find((x) => hit([normKey(x.title)], e.task));
+    if (!t) misses.push(`缺 task:${e.task}（估时）`);
+    else if (t.estimate !== e.minutes) misses.push(`task:${e.task} 估时应为 ${e.minutes} 分钟，实际 ${t.estimate ?? "无"}`);
+  }
   if (c.expect.chitchat && !isChitchat(r)) misses.push("应为纯闲聊");
   return { pass: misses.length === 0, misses };
 }

@@ -102,4 +102,21 @@ describe("TodoRow 徽标", () => {
     const w = mount(TodoRow, { props: { todo: openToday } });
     expect(w.find(".todo-meta").exists()).toBe(false);
   });
+
+  it("展示 reason 与耗时，逾期徽标标红", () => {
+    const w = mount(TodoRow, {
+      props: {
+        todo: {
+          ...openToday,
+          title: "去银行",
+          reason: "利率要重签",
+          estimate: 90,
+          due: "2020-01-01",
+        },
+      },
+    });
+    expect(w.get(".todo-why").text()).toBe("利率要重签");
+    expect(w.text()).toContain("约1.5小时");
+    expect(w.get(".todo-meta").classes()).toContain("overdue");
+  });
 });

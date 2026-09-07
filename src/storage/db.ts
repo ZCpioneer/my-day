@@ -6,22 +6,20 @@ import { localDate, shiftLocalDate } from "../dates";
 import { normKey } from "../norm";
 import type { ChatMessage, DailyLog, DayChat, Project, TimelineEvent, Todo, Waiting } from "../types";
 
-const DB_NAME = "zhaomu";
-const DB_VERSION = 2;
+const DB_NAME = "ai-secretary";
+const DB_VERSION = 1;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "date" });
-      if (!db.objectStoreNames.contains("todos")) db.createObjectStore("todos", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("logs")) db.createObjectStore("logs", { keyPath: "date" });
-      if (!db.objectStoreNames.contains("events")) db.createObjectStore("events", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("projects")) db.createObjectStore("projects", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("waitings")) db.createObjectStore("waitings", { keyPath: "id" });
-      // memories 功能已下线；store 保留占位（v2 已发布，删除需再升版本迁移）。
-      if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" });
+      db.createObjectStore("chats", { keyPath: "date" });
+      db.createObjectStore("todos", { keyPath: "id" });
+      db.createObjectStore("logs", { keyPath: "date" });
+      db.createObjectStore("events", { keyPath: "id" });
+      db.createObjectStore("projects", { keyPath: "id" });
+      db.createObjectStore("waitings", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -81,13 +79,6 @@ export const chatRepo = {
     });
     current.planConfirmedAt = at;
     store.put(current);
-    await txDone(tx);
-    db.close();
-  },
-  async clear(date: string): Promise<void> {
-    const db = await openDb();
-    const tx = db.transaction("chats", "readwrite");
-    tx.objectStore("chats").put({ date, messages: [] });
     await txDone(tx);
     db.close();
   },
@@ -235,6 +226,16 @@ export const logRepo = {
     });
     db.close();
     return row ?? null;
+  },
+  async list(): Promise<DailyLog[]> {
+    const db = await openDb();
+    const rows = await new Promise<DailyLog[]>((resolve, reject) => {
+      const req = db.transaction("logs").objectStore("logs").getAll();
+      req.onsuccess = () => resolve(req.result as DailyLog[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   },
   async put(log: DailyLog): Promise<void> {
     const db = await openDb();

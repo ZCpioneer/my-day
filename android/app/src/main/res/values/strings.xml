@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">朝暮</string>
-    <string name="title_activity_main">朝暮</string>
-    <string name="package_name">com.zhaomu.app</string>
-    <string name="custom_url_scheme">com.zhaomu.app</string>
+    <string name="app_name">AI 日程秘书</string>
+    <string name="title_activity_main">AI 日程秘书</string>
+    <string name="package_name">com.aisecretary.app</string>
+    <string name="custom_url_scheme">com.aisecretary.app</string>
 </resources>

@@ -68,6 +68,7 @@ export async function routeParseResult(
       when: "later",
       priority: t.priority,
       due: t.due,
+      estimate: t.estimate,
       project: t.project,
     });
   }

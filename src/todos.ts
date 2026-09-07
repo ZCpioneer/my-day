@@ -1,9 +1,6 @@
 import { localDate } from "./dates";
+import { normKey } from "./norm";
 import type { Todo } from "./types";
-
-function norm(s: string): string {
-  return s.replace(/\s+/g, "").toLowerCase();
-}
 
 export function todoWhen(t: Pick<Todo, "when">): "today" | "later" {
   return t.when === "later" ? "later" : "today";
@@ -61,18 +58,18 @@ export function applyTodayPlan(
   opts: { date: string; nowIso: string; newId: () => string },
 ): Todo[] {
   const wanted = titles.map((t) => t.trim()).filter(Boolean);
-  const wantedNorm = new Set(wanted.map(norm));
+  const wantedNorm = new Set(wanted.map(normKey));
   const next = existing.map((t) => ({ ...t }));
 
   for (const t of next) {
     if (t.status !== "open") continue;
-    if (wantedNorm.has(norm(t.title))) t.when = "today";
+    if (wantedNorm.has(normKey(t.title))) t.when = "today";
     else if (todoWhen(t) === "today") t.when = "later";
   }
 
-  const existingNorm = new Set(next.map((t) => norm(t.title)));
+  const existingNorm = new Set(next.map((t) => normKey(t.title)));
   for (const title of wanted) {
-    if (existingNorm.has(norm(title))) continue;
+    if (existingNorm.has(normKey(title))) continue;
     next.push({
       id: opts.newId(),
       title,
@@ -81,7 +78,7 @@ export function applyTodayPlan(
       createdAt: opts.nowIso,
       when: "today",
     });
-    existingNorm.add(norm(title));
+    existingNorm.add(normKey(title));
   }
   return next;
 }
@@ -102,19 +99,19 @@ export function applyFullPlan(
     .map(asEntry)
     .map((e) => ({ ...e, title: e.title.trim() }))
     .filter((e) => e.title);
-  const todayNorm = new Set(todayWanted.map((e) => norm(e.title)));
+  const todayNorm = new Set(todayWanted.map((e) => normKey(e.title)));
   const laterWanted = plan.later
     .map(asEntry)
     .map((e) => ({ ...e, title: e.title.trim() }))
-    .filter((e) => e.title && !todayNorm.has(norm(e.title)));
-  const laterNorm = new Set(laterWanted.map((e) => norm(e.title)));
+    .filter((e) => e.title && !todayNorm.has(normKey(e.title)));
+  const laterNorm = new Set(laterWanted.map((e) => normKey(e.title)));
   const projectOf = new Map<string, string | undefined>();
-  for (const e of [...todayWanted, ...laterWanted]) projectOf.set(norm(e.title), e.projectId);
+  for (const e of [...todayWanted, ...laterWanted]) projectOf.set(normKey(e.title), e.projectId);
   const next = existing.map((t) => ({ ...t }));
 
   for (const t of next) {
     if (t.status !== "open") continue;
-    const key = norm(t.title);
+    const key = normKey(t.title);
     if (todayNorm.has(key)) t.when = "today";
     else if (laterNorm.has(key)) t.when = "later";
     else if (todoWhen(t) === "today") t.when = "later";
@@ -122,13 +119,13 @@ export function applyFullPlan(
     if (pid !== undefined) t.projectId = pid;
   }
 
-  const existingNorm = new Set(next.map((t) => norm(t.title)));
+  const existingNorm = new Set(next.map((t) => normKey(t.title)));
   for (const [list, when] of [
     [todayWanted, "today"],
     [laterWanted, "later"],
   ] as const) {
     for (const e of list) {
-      if (existingNorm.has(norm(e.title))) continue;
+      if (existingNorm.has(normKey(e.title))) continue;
       const row: Todo = {
         id: opts.newId(),
         title: e.title,
@@ -139,7 +136,7 @@ export function applyFullPlan(
       };
       if (e.projectId) row.projectId = e.projectId;
       next.push(row);
-      existingNorm.add(norm(e.title));
+      existingNorm.add(normKey(e.title));
     }
   }
   return next;

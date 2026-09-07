@@ -43,16 +43,38 @@ describe("buildContextMessages", () => {
     const msgs = buildContextMessages({
       ...base,
       projects: [
-        { id: "p1", title: "朝暮", status: "active", note: "解析层联调完了", createdAt: "", updatedAt: "" },
+        { id: "p1", title: "日程秘书", status: "active", note: "解析层联调完了", createdAt: "", updatedAt: "" },
         { id: "p2", title: "旧项目", status: "done", createdAt: "", updatedAt: "" },
       ],
       waitings: [{ id: "w1", text: "等房东答复", waitingOn: "房东", since: "", fromMessageId: "m" }],
     });
     const facts = msgs[0]?.content ?? "";
     expect(facts).toContain("进行中的项目 1 个");
-    expect(facts).toContain("朝暮（解析层联调完了）");
+    expect(facts).toContain("日程秘书（解析层联调完了）");
     expect(facts).not.toContain("旧项目");
     expect(facts).toContain("等待中 1 件：等房东答复（等房东）");
+  });
+
+  it("待办摘要带上 priority/due/estimate/项目名", () => {
+    const msgs = buildContextMessages({
+      ...base,
+      todayTodos: [
+        {
+          id: "t1",
+          title: "交稿",
+          status: "open",
+          sourceDate: "2026-09-06",
+          createdAt: "2026-09-06T01:00:00.000Z",
+          priority: "high",
+          due: "2026-09-07",
+          estimate: 90,
+          projectId: "p1",
+        },
+      ],
+      projects: [{ id: "p1", title: "接私活", status: "active", createdAt: "", updatedAt: "" }],
+    });
+    const facts = msgs[0]?.content ?? "";
+    expect(facts).toContain("交稿（急 · 明天 · 约1.5小时 · 接私活）");
   });
 
   it("聊天历史截断为最近 12 条", () => {
@@ -72,7 +94,7 @@ describe("buildContextMessages", () => {
 
   it("纯闲聊不注入事件；关联项目时注入近期相关事件", () => {
     const events: TimelineEvent[] = [
-      { id: "e1", date: "2026-09-05", createdAt: "2026-09-05T01:00:00.000Z", kind: "event", text: "朝暮解析层联调完了", fromMessageId: "m1" },
+      { id: "e1", date: "2026-09-05", createdAt: "2026-09-05T01:00:00.000Z", kind: "event", text: "日程秘书解析层联调完了", fromMessageId: "m1" },
       { id: "e2", date: "2026-09-05", createdAt: "2026-09-05T02:00:00.000Z", kind: "event", text: "中午吃了螺蛳粉", fromMessageId: "m2" },
       { id: "e3", date: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z", kind: "decision", text: "定了用 Postgres", fromMessageId: "m3" },
     ];
@@ -81,12 +103,12 @@ describe("buildContextMessages", () => {
 
     const withResult = buildContextMessages({
       ...base,
-      parseResult: { ...emptyParseResult(), projectUpdates: [{ project: "朝暮", note: "x" }] },
+      parseResult: { ...emptyParseResult(), projectUpdates: [{ project: "日程秘书", note: "x" }] },
       recentEvents: events,
     });
     const facts = withResult[0]?.content ?? "";
     expect(facts).toContain("近期相关记录 2 条");
-    expect(facts).toContain("朝暮解析层联调完了");
+    expect(facts).toContain("日程秘书解析层联调完了");
     expect(facts).toContain("定了：定了用 Postgres");
     expect(facts).not.toContain("螺蛳粉");
   });

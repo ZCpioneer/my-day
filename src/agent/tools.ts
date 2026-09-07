@@ -33,4 +33,32 @@ export const TOOL_DEFS: ToolDef[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "propose_todos",
+      description: "把对话里谈好的事提议成待办（一条或多条，进「以后」）。用户确认后才会写入。解析层已弹过确认框的事不要重复提议。",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                reason: { type: "string" },
+                priority: { type: "string", enum: ["high", "normal"] },
+                due: { type: "string", description: "ISO 日期，如 2026-09-07；只有谈清楚时才给" },
+                estimate: { type: "number", description: "预估耗时，分钟；只有谈清楚时才给" },
+                project: { type: "string", description: "归属哪摊事（项目名），优先用现有项目" },
+              },
+              required: ["title"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+    },
+  },
 ];

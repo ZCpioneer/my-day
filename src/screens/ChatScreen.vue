@@ -2,7 +2,7 @@
   <section class="screen on">
     <div ref="threadEl" class="thread">
       <div v-if="messages.length === 0 && !pendingPropose && !awaiting" class="empty">
-        <div class="glyph">朝暮</div>
+        <div class="glyph">秘书</div>
         <p>
           想到什么直接说。<br />聊完点「自动整理待办」。确认这次整理后这段会清掉，可以重新聊。
         </p>
@@ -13,7 +13,7 @@
         class="msg"
         :class="m.role === 'user' ? 'me' : 'agent'"
       >
-        <div class="who">{{ m.role === "user" ? "我" : "朝暮" }}</div>
+        <div class="who">{{ m.role === "user" ? "我" : "秘书" }}</div>
         <div class="bubble">
           <p
             v-for="(line, i) in parseRichText(m.content)"
@@ -49,7 +49,7 @@
         @skip="emit('skip')"
       />
       <div v-else-if="awaiting" class="msg agent typing">
-        <div class="who">朝暮</div>
+        <div class="who">秘书</div>
         <div class="bubble">···</div>
       </div>
       <div ref="endEl" class="thread-end" />

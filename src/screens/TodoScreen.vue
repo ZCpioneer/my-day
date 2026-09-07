@@ -137,7 +137,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import GroupSheet from "@/components/GroupSheet.vue";
 import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
-import { edgeScrollDelta, HOLD_MS, insertIndex, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
+import { edgeScrollDelta, HOLD_MS, insertIndex, movementCancelsHold, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
 import { partitionLater, sortProjects, type LaterSection } from "@/todo-groups";
 import { loadCollapsedGroups, saveCollapsedGroups } from "@/storage/settings";
 import { partitionTodos, todoWhen } from "@/todos";
@@ -312,7 +312,7 @@ function onGroupPointerMove(e: PointerEvent) {
   if (groupPointer === null || e.pointerId !== groupPointer) return;
   if (!groupDragId) {
     // 拖动超过阈值 = 放弃长按，让位滚动
-    if (Math.abs(e.clientX - groupStartX) >= 8 || Math.abs(e.clientY - groupStartY) >= 8) {
+    if (movementCancelsHold(e.clientX - groupStartX, e.clientY - groupStartY)) {
       clearGroupDrag();
     }
     return;

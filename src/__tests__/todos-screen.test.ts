@@ -218,7 +218,7 @@ describe("TodoScreen 项目分区", () => {
     await flushPromises();
     await w.get("[data-group=p1] .group-head").trigger("click");
     expect(w.find("[data-group=p1] [data-todo=g1]").exists()).toBe(false);
-    expect(JSON.parse(localStorage.getItem("zhaomu.collapsed-groups")!)).toContain("p1");
+    expect(JSON.parse(localStorage.getItem("ai-secretary.collapsed-groups")!)).toContain("p1");
     const w2 = mount(TodoScreen, { props: { todos: groupedTodos, projects: groupedProjects } });
     await flushPromises();
     expect(w2.find("[data-group=p1] [data-todo=g1]").exists()).toBe(false);

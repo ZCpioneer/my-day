@@ -23,26 +23,6 @@ describe("chatRepo", () => {
     expect(day.messages[0].content).toBe("开始今天。");
   });
 
-  it("clears a day's conversation without touching todos", async () => {
-    await chatRepo.append("2026-09-05", {
-      id: "m1",
-      role: "user",
-      content: "开始今天。",
-      createdAt: "2026-09-05T01:00:00.000Z",
-      mode: "morning",
-    });
-    await todoRepo.add({
-      id: "t1",
-      title: "周报",
-      status: "open",
-      sourceDate: "2026-09-05",
-      createdAt: "2026-09-05T01:00:00.000Z",
-    });
-    await chatRepo.clear("2026-09-05");
-    expect((await chatRepo.get("2026-09-05")).messages).toEqual([]);
-    expect((await todoRepo.list()).map((t) => t.title)).toEqual(["周报"]);
-  });
-
   it("closeSession archives visible messages and stamps the plan", async () => {
     await chatRepo.append("2026-09-05", {
       id: "m1",
@@ -212,6 +192,22 @@ describe("logRepo", () => {
     const got = await logRepo.get("2026-09-05");
     expect(got?.state).toBe("还行");
   });
+
+  it("list returns every log newest first", async () => {
+    expect(await logRepo.list()).toEqual([]);
+    const mk = (date: string): DailyLog => ({
+      date,
+      plan: "早计划",
+      done: [],
+      undone: [],
+      state: "还行",
+      updatedAt: `${date}T12:00:00.000Z`,
+    });
+    await logRepo.put(mk("2026-09-05"));
+    await logRepo.put(mk("2026-09-03"));
+    await logRepo.put(mk("2026-09-04"));
+    expect((await logRepo.list()).map((l) => l.date)).toEqual(["2026-09-05", "2026-09-04", "2026-09-03"]);
+  });
 });
 
 describe("eventRepo", () => {
@@ -227,8 +223,8 @@ describe("eventRepo", () => {
 
 describe("projectRepo", () => {
   it("upsertByTitle 按归一化标题更新而不是新建", async () => {
-    await projectRepo.upsertByTitle("朝暮 App", { note: "立项" }, new Date(2026, 8, 5));
-    const again = await projectRepo.upsertByTitle("朝暮app", { note: "解析层联调完了" }, new Date(2026, 8, 6));
+    await projectRepo.upsertByTitle("日程秘书 App", { note: "立项" }, new Date(2026, 8, 5));
+    const again = await projectRepo.upsertByTitle("日程秘书app", { note: "解析层联调完了" }, new Date(2026, 8, 6));
     const all = await projectRepo.list();
     expect(all).toHaveLength(1);
     expect(all[0].note).toBe("解析层联调完了");
