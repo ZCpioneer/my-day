@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import LogCard from "@/components/LogCard.vue";
 import { dayLabel, localDate, monthLabel, weekdayLabel } from "@/dates";
 import type { DailyLog, WeeklyLog } from "@/types";
@@ -127,6 +127,14 @@ const pastGroups = computed(() => {
 
 const openDates = ref(new Set<string>());
 const weeklyOpen = ref(false);
+
+watch(
+  () => props.weekly,
+  (next, prev) => {
+    // 刚生成或重新生成：把结果展开给人看。进页时已有周报仍默认收起。
+    if (next && prev !== undefined) weeklyOpen.value = true;
+  },
+);
 
 function toggleDay(date: string) {
   const next = new Set(openDates.value);

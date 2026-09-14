@@ -3,7 +3,7 @@
     class="log-card"
     :class="{ 'log-card--collapsible': collapsible, 'log-card--collapsed': collapsed }"
     :data-log-day="log.date"
-    :aria-expanded="collapsible ? (!collapsed).toString() : undefined"
+    :aria-expanded="collapsible ? !collapsed : undefined"
     @click="onCardClick"
   >
     <div class="log-core">

@@ -75,7 +75,7 @@ src/
     default-key.ts     内置默认调试 Key（被 .gitignore 忽略），见「安全注意事项」
     default-key.example.ts  入库的模板文件
   __tests__/           全部 vitest 用例 + setup.ts
-  其余顶层模块          dates（含 weekKey/weekDates）/ ritual / todos / todos-filter / chat-session（含 shouldEveningGreet）/ diary /
+  其余顶层模块          dates（含 weekKey/weekDates/weekdayLabel/dayNumLabel/monthLabel）/ ritual / todos / todos-filter / chat-session（含 shouldEveningGreet）/ diary /
                        ids / keys / keyboard-inset / todo-drag / build-info / rich-text /
                        norm（归一化）/ todo-meta（徽标文案）/ todo-groups（以后栏分区）
                        （纯函数小工具，均有对应测试）
@@ -94,7 +94,7 @@ dist/                  构建产物（cap sync 的 webDir）
 - 一天按**本地日历日**（`src/dates.ts` 的 `localDate`）划分，不要用 UTC 日期。早/晚由 `daySplitHour`（默认 12）切分，见 `src/ritual.ts`。周报按 **ISO 周**（周一起、本地时区）划分，周键 `weekKey` / 周日期 `weekDates` 在 `src/dates.ts`。
 - 确认今日计划后会关闭当前对话段（`chatRepo.closeSession`），旧消息进 `DayChat.archive`，日记仍读归档。
 - 昨日日记每轮注入对话上下文（`runTurn` 里 `logRepo.get(昨天)` → `runAgent` 的 `yesterdayLog`）；当天对话完全空白时（`chat-session.ts` 的 `shouldGreet`）Agent 主动开场一次：按时段选文案——`shouldEveningGreet`（本地小时 ≥ 18 且当天还没日记）成立用 `EVENING_KICKOFF_TEXT`（对照早上计划逐条问进展），否则用 `KICKOFF_TEXT`；kickoff 文案只进 API 调用，不落用户气泡（`runTurn` 的 `silent` 选项，silent 轮跳过解析）。
-- 日记页不只显示今天：`logs` 按日期存全部日记，页面上方是今天（缺失时显示空态 + 「整理成日记」），中间「周报」区（本周未生成显示「生成本周周报」，已生成显示卡片 + 重新生成；`compose-week.ts` 聚合本周日记 + 待办完成情况落 `weeklyRepo`），下方「以往」区按日期倒序列出历史日记，默认折叠只显示日期，点击展开完整卡片（`LogCard`）。日记可编辑：`LogCard` 编辑模式只改模型写的文字（state/mood/cheer），保存经 App 侧 `logRepo.put` 落库并刷新双区。数据由 App 侧 `refreshPastLogs`（`logRepo.list()` 排除今天）在启动、跨日、补日记成功后刷新。
+- 日记页不只显示今天：`logs` 按日期存全部日记。上方是今天（缺失时矮空态卡 + 底栏「整理成日记」；已有则底栏「重新整理」）。今天和历史共用 `LogCard`：日期、星期、情绪、正文在同一张卡里，没有日期条和 `bare` 拆法。历史按月分组，默认收起仍露出报头和两行摘要，点开后寄语和编辑在同一张卡里出现（可多开）。周报夹在今天和历史之间：未生成显示「生成本周周报」，已生成默认只显示本周区间，点开才见三段正文 + 重新生成（`compose-week.ts` 聚合本周日记 + 待办完成情况落 `weeklyRepo`）。日记可编辑：`LogCard` 编辑模式只改模型写的文字（state/mood/cheer），保存经 App 侧 `logRepo.put` 落库并刷新双区。数据由 App 侧 `refreshPastLogs`（`logRepo.list()` 排除今天）在启动、跨日、补日记成功后刷新。
 - **本地通知提醒**：`src/notify.ts` 的 `planReminders` 纯函数输出 ReminderSpec[]——今日桶未完成待办带 due 的（带时间到点提醒、纯日期当天 9:00，过期跳过）+ 今天没日记时 21:00 催日记；调度策略是先 `cancelAll` 再全量 `schedule`（`rescheduleReminders`），有东西要挂才懒请求权限，拒绝/失败只记 debug（`DebugEvent` 有 `"notify"`）。重排时机：启动、今日计划确认、`syncProjects`（所有任务变更汇聚点）、跨日、日记写完（撤掉当晚催日记）。非原生平台 no-op。
 - 数据存储就用 IndexedDB + Capacitor Preferences 这两套，不要新加 SQLite 或本地文件存储。不要引入会外发数据的第三方服务（含 Google Fonts 这类远程字体）。
 

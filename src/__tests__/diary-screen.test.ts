@@ -89,6 +89,14 @@ describe("DiaryScreen", () => {
     expect(w.emitted("composeWeekly")).toHaveLength(1);
   });
 
+  it("周报从无到有时自动展开", async () => {
+    const w = mount(DiaryScreen, { props: { daily: null, pastLogs: [], weekly: null } });
+    expect(w.text()).not.toContain("做完了解析层");
+    await w.setProps({ weekly: mkWeekly() });
+    expect(w.text()).toContain("做完了解析层");
+    expect(w.text()).toContain("重新生成");
+  });
+
   it("周报区：已生成默认只显示区间，点开才见正文和重新生成", async () => {
     const w = mount(DiaryScreen, {
       props: { daily: null, pastLogs: [], weekly: mkWeekly() },
