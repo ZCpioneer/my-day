@@ -193,6 +193,15 @@ body {
   text-align: center;
   color: var(--mute);
 }
+.diary-empty {
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  color: var(--mute);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
 .empty .glyph {
   font-size: 34px;
   font-weight: 700;
@@ -882,6 +891,26 @@ html.native .phone {
   resize: vertical;
 }
 .log-textarea:focus { outline: 1px solid rgba(0, 122, 255, 0.4); }
+.weekly-mast {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--paper);
+  font: inherit;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  margin-bottom: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+}
+.weekly-caret {
+  font-size: 12px;
+  color: var(--mute);
+  font-weight: 500;
+}
 .weekly-empty { padding: 2px 0 4px; }
 .weekly-btn {
   width: 100%;
