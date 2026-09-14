@@ -66,7 +66,7 @@ describe("ChatScreen 文字 / 语音模式", () => {
   });
 
   it("语音回复完成后朗读秘书的话", async () => {
-    const speakReply = vi.fn(async () => {});
+    const speakReply = vi.fn(async (_text: string, _signal: AbortSignal) => {});
     let calls = 0;
     mockMic(() => {
       calls += 1;
@@ -106,7 +106,7 @@ describe("ChatScreen 文字 / 语音模式", () => {
   });
 
   it("朗读失败不挡下一轮听，也不出识别那种红字", async () => {
-    const speakReply = vi.fn(async () => {
+    const speakReply = vi.fn(async (_text: string, _signal: AbortSignal) => {
       throw new Error("合成失败");
     });
     let calls = 0;
