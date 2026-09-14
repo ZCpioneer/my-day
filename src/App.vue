@@ -239,7 +239,9 @@ async function onSpeakReply(text: string, signal?: AbortSignal): Promise<void> {
       signal,
     });
     if (signal?.aborted) return;
-    await playAudio(url, signal);
+    const ok = await playAudio(url, signal);
+    if (signal?.aborted) return;
+    if (!ok) debugLog.push({ event: "http_fail", detail: "tts: 播放失败" });
   } catch (e) {
     if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return;
     debugLog.push({ event: "http_fail", detail: `tts: ${e instanceof Error ? e.message : "unknown"}` });

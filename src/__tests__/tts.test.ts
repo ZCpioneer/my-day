@@ -67,12 +67,12 @@ describe("playAudio", () => {
   });
 
   it("http 改成 https，播完结束", async () => {
-    await playAudio("http://cdn.example/a.wav");
+    await expect(playAudio("http://cdn.example/a.wav")).resolves.toBe(true);
     expect(created[0]?.src).toBe("https://cdn.example/a.wav");
     expect(created[0]?.play).toHaveBeenCalled();
   });
 
-  it("play 失败也 resolve", async () => {
+  it("play 失败也 resolve，值为 false", async () => {
     vi.stubGlobal(
       "Audio",
       class {
@@ -86,10 +86,27 @@ describe("playAudio", () => {
         }
       },
     );
-    await expect(playAudio("https://cdn.example/a.wav")).resolves.toBeUndefined();
+    await expect(playAudio("https://cdn.example/a.wav")).resolves.toBe(false);
   });
 
-  it("abort 停播", async () => {
+  it("解码失败 resolve false", async () => {
+    vi.stubGlobal(
+      "Audio",
+      class {
+        constructor() {
+          const a = new FakeAudio();
+          a.play = vi.fn(async () => {
+            queueMicrotask(() => a.onerror?.());
+          });
+          created.push(a);
+          return a;
+        }
+      },
+    );
+    await expect(playAudio("https://cdn.example/a.wav")).resolves.toBe(false);
+  });
+
+  it("abort 停播并 resolve false", async () => {
     const ac = new AbortController();
     vi.stubGlobal(
       "Audio",
@@ -104,7 +121,7 @@ describe("playAudio", () => {
     );
     const p = playAudio("https://cdn.example/a.wav", ac.signal);
     ac.abort();
-    await p;
+    await expect(p).resolves.toBe(false);
     expect(created[0]?.pause).toHaveBeenCalled();
   });
 

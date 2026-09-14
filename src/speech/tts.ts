@@ -70,21 +70,21 @@ export async function warmupAudio(): Promise<void> {
   }
 }
 
-/** 播放一段 wav。失败、取消、播完都 resolve，不抛。 */
-export function playAudio(url: string, signal?: AbortSignal): Promise<void> {
+/** 播放一段 wav。ended → true；play 被拒 / 解码失败 / 取消 → false。不抛。 */
+export function playAudio(url: string, signal?: AbortSignal): Promise<boolean> {
   const src = httpsUrl(url);
-  if (!src || signal?.aborted) return Promise.resolve();
+  if (!src || signal?.aborted) return Promise.resolve(false);
 
   return new Promise((resolve) => {
     const a = getPlayer();
     let settled = false;
-    const done = () => {
+    const done = (ok: boolean) => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
       a.onended = null;
       a.onerror = null;
-      resolve();
+      resolve(ok);
     };
     const onAbort = () => {
       try {
@@ -94,14 +94,14 @@ export function playAudio(url: string, signal?: AbortSignal): Promise<void> {
       } catch {
         /* ignore */
       }
-      done();
+      done(false);
     };
 
-    a.onended = done;
-    a.onerror = () => done();
+    a.onended = () => done(true);
+    a.onerror = () => done(false);
     signal?.addEventListener("abort", onAbort, { once: true });
     a.muted = false;
     a.src = src;
-    void a.play().catch(() => done());
+    void a.play().catch(() => done(false));
   });
 }
