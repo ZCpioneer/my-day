@@ -1,15 +1,22 @@
+/* 方案 A「晨光浅色」（柔光护眼版）：雾灰底 + 米白卡片 + 沉稳蓝主色，整体降亮不刺眼。
+   变量名沿用旧主题做了语义重映射（--ink=页面底、--paper=主文字、--dawn=主色），
+   彩色克制四种：蓝（主）/ 绿（完成）/ 红（急·删除）/ 琥珀（情绪卡，仅日记）。 */
 :root {
-  --ink: #0c1014;
-  --ink-2: #141a22;
-  --panel: #1b222c;
-  --paper: #efe6d4;
-  --paper-dim: #cfc4ad;
-  --dawn: #e0b15a;
-  --dusk: #8ea0c8;
-  --clay: #c56b58;
-  --moss: #8aa07a;
-  --mute: #8b8376;
-  --line: rgba(239, 230, 212, 0.09);
+  --ink: #e9ebef;
+  --panel: #f7f8fa;
+  --paper: #33373e;
+  --paper-dim: #4b5260;
+  --dawn: #0068d1;
+  --dusk: #667085;
+  --clay: #e0453a;
+  --moss: #2fa84f;
+  --mute: #6b7280;
+  --ink-3: #9ca3af;
+  --red-deep: #c23b30;
+  --blue-tint: rgba(0, 104, 209, 0.1);
+  --line: rgba(16, 24, 40, 0.08);
+  --shadow-card: 0 1px 2px rgba(23, 25, 35, 0.04), 0 4px 16px rgba(23, 25, 35, 0.06);
+  --shadow-float: 0 16px 40px rgba(23, 25, 35, 0.12), 0 2px 6px rgba(23, 25, 35, 0.05);
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --kb: 0px;
@@ -20,25 +27,15 @@
 html, body, #app { min-height: 100%; height: 100%; }
 
 body {
-  font-family: "Noto Sans SC", sans-serif;
-  background:
-    radial-gradient(1200px 600px at 50% -10%, #243044 0%, transparent 55%),
-    var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Noto Sans SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(1200px 640px at 50% -8%, #e4e6eb 0%, #d6d9e0 52%, #c9ccd4 100%);
   color: var(--paper);
   min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 28px 16px;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 8;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%3An)'/%3E%3C/svg%3E");
+  -webkit-font-smoothing: antialiased;
 }
 
 #app {
@@ -52,14 +49,12 @@ body::before {
   border-radius: 30px;
   overflow: hidden;
   padding-bottom: var(--kb, 0px);
-  background:
-    linear-gradient(180deg, rgba(224,177,90,0.07), transparent 22%),
-    var(--ink-2);
+  background: var(--ink);
   display: flex;
   flex-direction: column;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.08),
-    0 30px 80px rgba(0,0,0,0.45);
+    0 24px 64px rgba(23, 25, 35, 0.14),
+    0 4px 16px rgba(23, 25, 35, 0.08);
 }
 
 .app-top {
@@ -70,10 +65,9 @@ body::before {
 }
 
 .brand {
-  font-family: "Noto Serif SC", serif;
-  font-size: 28px;
-  letter-spacing: 0.28em;
-  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  font-weight: 700;
 }
 .brand span { color: var(--dawn); }
 
@@ -83,24 +77,24 @@ body::before {
   gap: 8px;
   text-align: right;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .when em {
   font-style: normal;
   color: var(--paper-dim);
-  font-family: "Noto Serif SC", serif;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .gear {
   appearance: none;
   border: 0;
-  background: rgba(239, 230, 212, 0.1);
-  color: var(--paper);
+  background: var(--panel);
+  color: var(--mute);
   min-width: 44px;
-  height: 36px;
-  padding: 0 10px;
+  height: 40px;
+  padding: 0 12px;
   border-radius: 999px;
   cursor: pointer;
   display: inline-flex;
@@ -108,27 +102,30 @@ body::before {
   gap: 4px;
   font: inherit;
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
+  box-shadow: 0 1px 2px rgba(23, 25, 35, 0.05), 0 4px 10px rgba(23, 25, 35, 0.05);
+  transition: transform 180ms var(--ease);
 }
-.gear svg { width: 16px; height: 16px; }
-.gear:active { transform: scale(0.96); }
+.gear svg { width: 17px; height: 17px; }
+.gear:active { transform: scale(0.97); }
 
+/* 早/晚分段：iOS 分段控件——浅灰底容器 + 白色选中块带轻投影。 */
 .ritual {
   flex: none;
   margin: 8px 16px 0;
-  padding: 5px;
-  border-radius: 22px;
-  background: rgba(0,0,0,0.22);
+  padding: 4px;
+  border-radius: 16px;
+  background: #dee1e7;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 5px;
+  gap: 4px;
 }
 .ritual button {
   appearance: none;
   border: 0;
   background: transparent;
   color: var(--mute);
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 12px 10px 11px;
   display: flex;
   align-items: center;
@@ -139,24 +136,27 @@ body::before {
   transition: transform 220ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
 }
 .ritual button strong {
-  font-family: "Noto Serif SC", serif;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-}
-.ritual button small {
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .ritual button.active {
   background: var(--panel);
   color: var(--paper);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.ritual button.morning.active { color: var(--dawn); }
-.ritual button.evening.active { color: var(--dusk); }
-.ritual button:active { transform: scale(0.98); }
+.ritual button:active { transform: scale(0.97); }
 .ritual button:disabled { opacity: 0.45; cursor: default; }
+
+.chat-mode {
+  margin-top: 0;
+}
+.chat-mode button {
+  padding: 10px 8px 9px;
+}
+.chat-mode button strong {
+  font-size: 14px;
+}
 
 .screens {
   flex: 1;
@@ -177,10 +177,13 @@ body::before {
 .thread, .todo-scroll, .diary-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 18px 12px;
+  padding: 16px 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.todo-scroll {
+  padding-bottom: 80px;
 }
 .thread::-webkit-scrollbar { width: 0; }
 .thread-end { height: 1px; flex: none; }
@@ -191,10 +194,10 @@ body::before {
   color: var(--mute);
 }
 .empty .glyph {
-  font-family: "Noto Serif SC", serif;
-  font-size: 42px;
-  color: var(--paper);
-  letter-spacing: 0.2em;
+  font-size: 34px;
+  font-weight: 700;
+  color: rgba(16, 24, 40, 0.16);
+  letter-spacing: 0.08em;
   margin-bottom: 10px;
 }
 .empty p { font-size: 13px; line-height: 1.7; }
@@ -207,7 +210,7 @@ body::before {
 .msg.me { align-self: flex-end; }
 .bubble {
   padding: 11px 13px;
-  border-radius: 16px;
+  border-radius: 17px;
   font-size: 14px;
   line-height: 1.65;
 }
@@ -222,17 +225,18 @@ body::before {
 }
 .msg.agent .bubble {
   background: var(--panel);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  box-shadow: var(--shadow-card);
   border-bottom-left-radius: 6px;
 }
 .msg.me .bubble {
-  background: #3a3124;
-  color: var(--paper);
+  background: var(--dawn);
+  color: #fff;
   border-bottom-right-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.25);
 }
 .who {
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   color: var(--mute);
   margin: 0 4px 5px;
 }
@@ -245,30 +249,32 @@ body::before {
 .propose-shell {
   padding: 5px;
   border-radius: 20px;
-  background: rgba(224, 177, 90, 0.08);
+  background: rgba(0, 122, 255, 0.05);
 }
 .propose-core {
   background: var(--panel);
   border-radius: 16px;
   padding: 12px 12px 10px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  box-shadow: var(--shadow-card);
 }
 .propose-core header {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--dawn);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   margin-bottom: 8px;
 }
 .propose-note {
   font-size: 13px;
-  color: var(--paper-dim);
+  color: var(--mute);
   line-height: 1.65;
   padding: 0 4px 8px;
 }
 .propose-group {
   font-size: 11px;
+  font-weight: 700;
   color: var(--dawn);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   padding: 8px 4px 2px;
 }
 .propose-sub {
@@ -281,11 +287,13 @@ body::before {
   gap: 6px;
 }
 .propose-new {
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--dawn);
-  border: 1px solid var(--dawn);
-  border-radius: 6px;
-  padding: 0 4px;
+  background: var(--blue-tint);
+  border: 0;
+  border-radius: 999px;
+  padding: 1px 6px;
 }
 .propose-sub-check {
   display: flex;
@@ -312,98 +320,157 @@ body::before {
   border: 0;
   cursor: pointer;
   font: inherit;
-  border-radius: 999px;
-  padding: 9px 10px;
-  font-size: 13px;
+  border-radius: 13px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
   transition: transform 180ms var(--ease);
 }
-.propose-actions button:active { transform: scale(0.98); }
-.btn-yes { background: var(--dawn); color: #1a1408; font-weight: 600; }
-.btn-no { background: rgba(255,255,255,0.05); color: var(--paper-dim); }
+.propose-actions button:active { transform: scale(0.97); }
+.btn-yes {
+  background: var(--dawn);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(0, 122, 255, 0.26);
+}
+.btn-no { background: #e8eaee; color: var(--paper-dim); }
 
 .composer {
-  padding: 8px 14px 6px;
+  padding: 8px 16px 8px;
 }
 .composer-shell {
   padding: 4px;
-  border-radius: 22px;
-  background: rgba(0,0,0,0.28);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
   display: flex;
   gap: 6px;
   align-items: center;
 }
 .composer input {
   flex: 1;
+  min-width: 0;
   border: 0;
-  background: var(--panel);
+  background: transparent;
   color: var(--paper);
   border-radius: 18px;
-  padding: 11px 14px;
+  height: 44px;
+  padding: 0 14px;
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   outline: none;
 }
+.composer input::placeholder { color: var(--ink-3); }
 .tidy {
-  height: 40px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 14px;
   border: 0;
   border-radius: 999px;
-  background: rgba(142, 160, 200, 0.16);
-  color: var(--dusk);
+  background: var(--blue-tint);
+  color: var(--dawn);
   cursor: pointer;
-  font-family: "Noto Serif SC", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   flex: none;
   white-space: nowrap;
   transition: transform 180ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
 }
-.tidy:active { transform: scale(0.96); }
+.tidy:active { transform: scale(0.97); }
 .tidy:disabled { opacity: 0.45; cursor: default; }
 .catchup-note {
-  margin: 0 18px 8px;
+  margin: 0 16px 8px;
   font-size: 12px;
   color: var(--dusk);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 .diary-compose {
-  padding: 8px 18px 10px;
+  padding: 8px 16px 12px;
 }
 .diary-compose-btn {
   width: 100%;
   height: 44px;
   border: 0;
-  border-radius: 999px;
-  background: rgba(142, 160, 200, 0.16);
-  color: var(--dusk);
+  border-radius: 14px;
+  background: var(--dawn);
+  color: #fff;
   cursor: pointer;
-  font-family: "Noto Serif SC", serif;
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 18px rgba(0, 122, 255, 0.26);
+  transition: transform 180ms var(--ease);
 }
-.diary-compose-btn:active { transform: scale(0.98); }
+.diary-compose-btn:active { transform: scale(0.97); }
 .diary-compose-btn:disabled { opacity: 0.45; cursor: default; }
 .send {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 50%;
   background: var(--dawn);
-  color: #1a1408;
+  color: #fff;
   cursor: pointer;
   display: grid;
   place-items: center;
+  box-shadow: 0 8px 18px rgba(0, 122, 255, 0.3);
   transition: transform 180ms var(--ease);
 }
-.send:active { transform: scale(0.96); }
+.send:active { transform: scale(0.97); }
 .send:disabled { opacity: 0.45; cursor: default; }
+.voice-panel {
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.voice-status {
+  font-size: 13px;
+  color: var(--mute);
+  text-align: center;
+  min-height: 1.5em;
+}
+.voice-orb {
+  width: 72px;
+  height: 72px;
+  border: 0;
+  border-radius: 50%;
+  background: #e8eaee;
+  color: var(--mute);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 180ms var(--ease), background 220ms var(--ease), color 220ms var(--ease);
+}
+.voice-orb:active { transform: scale(0.97); }
+.voice-orb:disabled { opacity: 0.45; cursor: default; }
+.voice-orb.listening,
+.voice-orb.recording {
+  color: #fff;
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+.voice-orb.listening { background: var(--dawn); }
+.voice-orb.recording { background: var(--clay); }
+.voice-orb.speaking { background: var(--dawn); color: #fff; }
+.voice-orb.waiting,
+.voice-orb.transcribing { background: var(--blue-tint); color: var(--dawn); }
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 104, 209, 0.35); }
+  50% { box-shadow: 0 0 0 10px rgba(0, 104, 209, 0); }
+}
+.voice-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--clay);
+  text-align: center;
+}
 .hint {
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--mute);
   padding: 2px 0 4px;
+  line-height: 1.5;
 }
 
 .dock-wrap {
@@ -434,36 +501,40 @@ html.native .phone {
   border-radius: 0;
   box-shadow: none;
 }
+/* 悬浮胶囊底栏：白色毛玻璃，选中 tab 浅蓝药丸。 */
 .dock {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   padding: 5px;
   border-radius: 24px;
-  background: rgba(0,0,0,0.35);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(16, 24, 40, 0.04);
+  box-shadow: var(--shadow-float);
   backdrop-filter: blur(16px);
 }
 .dock button {
   border: 0;
   background: transparent;
-  color: var(--mute);
+  color: var(--ink-3);
   font: inherit;
-  padding: 10px 0 8px;
+  padding: 9px 0 8px;
   border-radius: 18px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   transition: background 220ms var(--ease), color 220ms var(--ease), transform 180ms var(--ease);
 }
-.dock button svg { width: 18px; height: 18px; }
+.dock button svg { width: 20px; height: 20px; }
 .dock button.on {
-  background: var(--panel);
-  color: var(--paper);
+  background: var(--blue-tint);
+  color: var(--dawn);
 }
-.dock button:active { transform: scale(0.98); }
+.dock button:active { transform: scale(0.97); }
 
 .todo-head, .diary-head {
   display: flex;
@@ -479,7 +550,7 @@ html.native .phone {
 .todo-hint {
   font-size: 11px;
   color: var(--mute);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 .todo-bucket {
   display: flex;
@@ -512,23 +583,22 @@ html.native .phone {
   position: absolute;
   z-index: 30;
   pointer-events: none;
-  left: 18px;
-  right: 18px;
+  left: 16px;
+  right: 16px;
   transform: translateY(-50%) scale(1.03);
-  padding: 14px 12px;
+  padding: 14px 16px;
   border-radius: 18px;
   background: var(--panel);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 32px rgba(23, 25, 35, 0.18);
   font-size: 14px;
   line-height: 1.5;
 }
 .todo-head h2, .diary-head h2 {
-  font-family: "Noto Serif SC", serif;
   font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
-.count { color: var(--dawn); font-size: 13px; }
+.count { color: var(--dawn); font-size: 13px; font-weight: 600; }
 
 .todo-scroll > * {
   flex-shrink: 0;
@@ -547,12 +617,12 @@ html.native .phone {
   width: 76px;
   border: 0;
   background: var(--clay);
-  color: #1a1408;
+  color: #fff;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 .todo-del:active { filter: brightness(0.92); }
 .todo-act {
@@ -562,23 +632,23 @@ html.native .phone {
   bottom: 0;
   width: 76px;
   border: 0;
-  background: var(--panel);
-  color: var(--paper);
+  background: #dee1e7;
+  color: var(--paper-dim);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
-.todo-act:active { filter: brightness(1.2); }
+.todo-act:active { filter: brightness(0.95); }
 .item {
   position: relative;
   z-index: 1;
   display: flex;
   gap: 12px;
-  padding: 14px 12px;
+  padding: 14px 16px;
   border-radius: 18px;
   background: var(--panel);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   align-items: flex-start;
   touch-action: pan-y;
@@ -590,13 +660,15 @@ html.native .phone {
 }
 .item.dragging { transition: none; }
 .box {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  margin-top: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  margin-top: 1px;
   flex: none;
-  background: rgba(255,255,255,0.04);
-  box-shadow: inset 0 0 0 1px rgba(239,230,212,0.18);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1.6px #c0c4cc;
+  color: #fff;
+  font-size: 13px;
   display: grid;
   place-items: center;
 }
@@ -605,11 +677,14 @@ html.native .phone {
   box-shadow: none;
 }
 .item.done p { color: var(--mute); text-decoration: line-through; }
-.item p { font-size: 14px; line-height: 1.5; }
+.item p { font-size: 14.5px; line-height: 1.5; }
+/* 条目内的徽标/理由压回 12px 辅助层级（.item p 的元素级优先级会盖过裸类名）。 */
+.item .todo-meta, .item .todo-why { font-size: 12px; }
 .section-label {
   font-size: 11px;
+  font-weight: 700;
   color: var(--mute);
-  letter-spacing: 0.16em;
+  letter-spacing: 0.06em;
   padding: 6px 4px 0;
 }
 
@@ -630,8 +705,8 @@ html.native .phone {
 }
 .group-name {
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--paper);
 }
 .group-head.done .group-name {
@@ -640,6 +715,7 @@ html.native .phone {
 }
 .group-progress {
   font-size: 11px;
+  font-weight: 600;
   color: var(--dawn);
 }
 .group-arrow {
@@ -648,7 +724,7 @@ html.native .phone {
   color: var(--mute);
 }
 .group-handle {
-  color: var(--mute);
+  color: var(--ink-3);
   font-size: 12px;
   cursor: grab;
   touch-action: none;
@@ -665,109 +741,195 @@ html.native .phone {
   margin: -12px 4px 0;
 }
 .group-add {
-  border: 1px dashed rgba(239, 230, 212, 0.25);
+  border: 1px dashed rgba(16, 24, 40, 0.18);
   background: none;
   color: var(--mute);
   border-radius: 14px;
   padding: 10px;
   font: inherit;
   font-size: 13px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   cursor: pointer;
 }
-.group-add:active { filter: brightness(1.3); }
+.group-add:active { filter: brightness(0.95); }
 
 .log-card {
   padding: 5px;
   border-radius: 24px;
-  background: rgba(255,255,255,0.03);
-}
-.log-card--bare {
-  padding: 0;
-  border-radius: 0;
   background: transparent;
 }
-.log-card--bare .log-core {
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  padding: 12px 14px 6px;
-}
+.log-card--collapsible { cursor: pointer; }
+.log-card--collapsible:active .log-core { filter: brightness(0.97); }
 .log-core {
-  background: #221c16;
-  border-radius: 20px;
+  background: var(--panel);
+  border-radius: 18px;
   padding: 18px 16px 16px;
-  box-shadow: inset 0 1px 0 rgba(224,177,90,0.18);
+  box-shadow: var(--shadow-card);
 }
-.log-core h3 {
-  font-family: "Noto Serif SC", serif;
-  font-size: 20px;
+.log-mast {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.log-mast-when {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.log-kicker {
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
-  margin-bottom: 14px;
-}
-.log-block { margin-bottom: 14px; }
-.log-block .lab {
-  font-size: 10px;
-  letter-spacing: 0.18em;
   color: var(--dawn);
-  margin-bottom: 6px;
 }
-.log-block p, .log-block li {
+.log-when {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.log-state {
   font-size: 13.5px;
   line-height: 1.7;
   color: var(--paper-dim);
 }
-.log-block ul { padding-left: 1.1em; }
-.log-day {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.log-state--clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.log-day-head {
-  border: 0;
-  background: var(--panel);
+.log-block { margin-bottom: 14px; }
+.log-block .lab {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--dawn);
+  margin-bottom: 6px;
+}
+.log-block p {
+  font-size: 13.5px;
+  line-height: 1.7;
   color: var(--paper-dim);
-  border-radius: 14px;
-  padding: 12px 14px;
-  font: inherit;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.log-day-head:active { filter: brightness(1.2); }
-.log-day-arrow { font-size: 11px; color: var(--mute); }
 .mood {
   margin-top: 4px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: rgba(0,0,0,0.25);
-  color: var(--paper);
+  background: #f5eedd;
+  border: 1px solid #ecdcc0;
+  color: #7d5406;
   font-size: 13px;
   line-height: 1.65;
 }
+.mood-emoji { font-size: 20px; line-height: 1; }
+.log-cheer {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.09), rgba(90, 200, 250, 0.12));
+  border-radius: 14px;
+  padding: 10px 13px;
+  color: #0a54a3 !important;
+}
+.log-mood-row { display: flex; gap: 8px; align-items: flex-start; }
+.log-mood-input {
+  width: 56px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 16px;
+  text-align: center;
+  padding: 8px 4px;
+}
+.log-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+.log-edit-btn {
+  border: 0;
+  border-radius: 999px;
+  background: #e8eaee;
+  color: var(--paper-dim);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: transform 180ms var(--ease);
+}
+.log-edit-btn:active { transform: scale(0.97); }
+.log-edit-btn:disabled { opacity: 0.45; cursor: default; }
+.log-edit-btn--primary {
+  background: var(--dawn);
+  color: #fff;
+  font-weight: 600;
+}
+.log-textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.7;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.log-textarea:focus { outline: 1px solid rgba(0, 122, 255, 0.4); }
+.weekly-empty { padding: 2px 0 4px; }
+.weekly-btn {
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: #e8eaee;
+  color: var(--paper);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: transform 180ms var(--ease);
+}
+.weekly-btn:active { transform: scale(0.97); }
+.weekly-btn:disabled { opacity: 0.45; cursor: default; }
+.weekly-error {
+  padding: 8px 6px 0;
+  font-size: 12px;
+  color: var(--red-deep);
+}
 
 .typing .bubble { color: var(--mute); letter-spacing: 0.2em; }
+
+/* 流式气泡的打字光标：跟在最后一行末尾闪烁 */
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: stream-blink 0.9s steps(2, start) infinite;
+}
+@keyframes stream-blink {
+  50% { opacity: 0; }
+}
 
 .debug-panel {
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--paper-dim);
+  background: #e8eaee;
+  border: 1px solid var(--line);
+  color: var(--mute);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   line-height: 1.5;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-}
-.hint {
-  font-size: 12px;
-  color: var(--mute);
-  line-height: 1.5;
-  letter-spacing: 0;
 }
 .debug-head {
   display: flex;
@@ -776,12 +938,12 @@ html.native .phone {
   margin-bottom: 6px;
 }
 .debug-head button {
-  border: 0;
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  background: var(--panel);
   color: var(--paper-dim);
   font: inherit;
   font-size: 11px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -798,7 +960,7 @@ html.native .phone {
 .settings-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 18px 24px;
+  padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -808,13 +970,14 @@ html.native .phone {
   flex-direction: column;
   gap: 6px;
 }
-.field span, .field-row span {
+.field span {
   font-size: 11px;
-  letter-spacing: 0.16em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--mute);
 }
 .field input, .field select {
-  border: 0;
+  border: 1px solid var(--line);
   background: var(--panel);
   color: var(--paper);
   border-radius: 14px;
@@ -823,29 +986,23 @@ html.native .phone {
   font-size: 14px;
   outline: none;
 }
-.field-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 0;
-}
-.field-row input {
-  accent-color: var(--dawn);
-}
+.field input:focus, .field select:focus { border-color: rgba(0, 122, 255, 0.5); }
+.field input::placeholder { color: var(--ink-3); }
 .btn-save {
   border: 0;
   cursor: pointer;
   font: inherit;
-  border-radius: 999px;
+  border-radius: 14px;
+  min-height: 44px;
   padding: 12px 16px;
   background: var(--dawn);
-  color: #1a1408;
+  color: #fff;
   font-weight: 600;
+  box-shadow: 0 8px 18px rgba(0, 122, 255, 0.26);
+  transition: transform 180ms var(--ease);
 }
-.send:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
+.btn-save:active { transform: scale(0.97); }
+.btn-save:disabled { opacity: 0.45; cursor: default; }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(8px); }
@@ -864,16 +1021,22 @@ html.native .phone {
 
 .todo-meta {
   font-size: 12px;
-  opacity: 0.6;
+  color: var(--mute);
   margin-left: 6px;
 }
-.todo-meta.hot { color: var(--dawn); opacity: 1; }
-.todo-meta.overdue { color: #e06c5a; opacity: 1; }
+.todo-meta.hot {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--red-deep);
+  font-weight: 600;
+}
+.todo-meta.overdue { color: var(--red-deep); }
 .todo-why {
   display: block;
   font-size: 12px;
-  color: var(--paper-dim);
-  opacity: 0.75;
+  color: var(--mute);
   margin-top: 2px;
 }
 .todo-pick-row {
@@ -886,11 +1049,12 @@ html.native .phone {
 .todo-adjust {
   border: 0;
   background: none;
-  color: var(--paper-dim);
+  color: var(--dawn);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  padding: 10px 4px 0;
+  padding: 11px 10px;
   flex-shrink: 0;
 }
 .todo-edit {
@@ -909,8 +1073,8 @@ html.native .phone {
 .todo-edit-new {
   font: inherit;
   color: var(--paper);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #e8eaee;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 4px 6px;
   max-width: 150px;
@@ -930,32 +1094,39 @@ html.native .phone {
 }
 .sheet-mask {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  /* 键盘高度走 --kb（adjustNothing 不挤 WebView），浮层贴在键盘上沿。 */
+  bottom: var(--kb, 0px);
+  left: 0;
   z-index: 40;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.36);
   display: flex;
   align-items: flex-end;
 }
 .sheet {
   width: 100%;
-  background: var(--ink);
-  border-radius: 18px 18px 0 0;
+  background: var(--panel);
+  border-radius: 20px 20px 0 0;
   padding: 16px 16px 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: 0 -12px 40px rgba(23, 25, 35, 0.16);
+  max-height: 100%;
+  overflow-y: auto;
 }
 .sheet header {
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
 }
 .sheet-opt {
   text-align: left;
   padding: 12px;
   border: 0;
   border-radius: 12px;
-  background: var(--panel);
+  background: #e8eaee;
   color: var(--paper);
   font: inherit;
   font-size: 14px;
@@ -965,21 +1136,24 @@ html.native .phone {
 }
 .sheet-cur { color: var(--dawn); font-size: 11px; }
 .sheet-row { display: flex; gap: 8px; }
-.sheet-row input {
+.sheet-row input,
+.sheet-row select {
   flex: 1;
   padding: 10px 12px;
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--panel);
+  background: var(--ink);
   color: var(--paper);
   font: inherit;
+  outline: none;
 }
+.sheet-row input::placeholder { color: var(--ink-3); }
 .sheet-row button {
   border: 0;
   border-radius: 12px;
   padding: 0 14px;
   background: var(--dawn);
-  color: #1a1408;
+  color: #fff;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -992,6 +1166,66 @@ html.native .phone {
   color: var(--mute);
   font: inherit;
   font-size: 13px;
-  padding: 8px;
+  padding: 10px 8px;
   cursor: pointer;
+}
+.sheet-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #dee1e7;
+}
+.sheet-seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--mute);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sheet-seg button.on {
+  background: var(--panel);
+  color: var(--paper);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.sheet-submit {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--dawn);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sheet-submit:disabled { opacity: 0.4; cursor: default; }
+.todo-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dawn);
+  color: #fff;
+  box-shadow: var(--shadow-float);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 180ms var(--ease), filter 180ms var(--ease);
+}
+.todo-fab svg { width: 22px; height: 22px; }
+.todo-fab:active { transform: scale(0.94); filter: brightness(0.95); }
+
+@media (prefers-reduced-motion: reduce) {
+  .log-card--collapsible:active .log-core { filter: none; }
+  .log-edit-btn, .diary-compose-btn, .weekly-btn { transition: none; }
 }
