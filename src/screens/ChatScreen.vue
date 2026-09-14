@@ -439,10 +439,11 @@ async function runVoiceSession() {
       const said = (await recognize(wav)).trim();
       if (!said) continue;
       if (signal.aborted || sessionGen !== gen) break;
+      const prev = lastAssistantId();
       emit("send", said);
       await until(() => props.awaiting, signal, 3000);
       if (signal.aborted || sessionGen !== gen) break;
-      await until(() => !props.awaiting, signal);
+      await until(() => lastAssistantId() !== prev || !props.awaiting, signal);
       if (signal.aborted || sessionGen !== gen) break;
       await speakLatest(signal);
       if (signal.aborted || sessionGen !== gen) break;

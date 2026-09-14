@@ -105,6 +105,55 @@ describe("ChatScreen 文字 / 语音模式", () => {
     w.unmount();
   });
 
+  it("确认框还开着也可以朗读，关框后同一句不读第二遍", async () => {
+    const speakReply = vi.fn(async (_text: string, _signal: AbortSignal) => {});
+    let calls = 0;
+    mockMic(() => {
+      calls += 1;
+      if (calls === 1) return { finish() {}, cancel() {}, result: Promise.resolve("V0FW") };
+      return hangListen();
+    });
+    const w = mount(ChatScreen, {
+      props: {
+        messages: [],
+        awaiting: false,
+        pendingPropose: null,
+        recognize: async () => "提醒我下午买牛奶",
+        speakReply,
+      },
+    });
+    await w.get("[data-testid=mode-voice]").trigger("click");
+    await flushPromises();
+    expect(w.emitted("send")).toBeTruthy();
+    await w.setProps({ awaiting: true });
+    await flushPromises();
+    await w.setProps({
+      awaiting: true,
+      pendingPropose: [{ title: "买牛奶", when: "later" }],
+      proposeKind: "later",
+      messages: [
+        {
+          id: "a1",
+          role: "assistant",
+          content: "先记下买牛奶。",
+          createdAt: "2026-09-05T01:00:00.000Z",
+          mode: "chat",
+        },
+      ],
+    });
+    await flushPromises();
+    expect(speakReply).toHaveBeenCalledTimes(1);
+    expect(speakReply.mock.calls[0][0]).toContain("买牛奶");
+    const listensWhileSheet = calls;
+    await new Promise((r) => setTimeout(r, 350));
+    await flushPromises();
+    expect(calls).toBe(listensWhileSheet);
+    await w.setProps({ awaiting: false, pendingPropose: null });
+    await flushPromises();
+    expect(speakReply).toHaveBeenCalledTimes(1);
+    w.unmount();
+  });
+
   it("朗读失败不挡下一轮听，也不出识别那种红字", async () => {
     const speakReply = vi.fn(async (_text: string, _signal: AbortSignal) => {
       throw new Error("合成失败");
