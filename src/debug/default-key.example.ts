@@ -1,2 +1,4 @@
 /** DEBUG ONLY，正式发布前删除。把 Key 填在下一行。填了之后不要 git add 这个文件。 */
 export const DEFAULT_DEBUG_KEY = "";
+/** DEBUG ONLY，正式发布前删除。阿里云百炼语音 Key（识别与朗读共用）。 */
+export const DEFAULT_DEBUG_ASR_KEY = "";

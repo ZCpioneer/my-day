@@ -43,10 +43,27 @@ export interface Todo {
 
 export interface DailyLog {
   date: string;
-  plan: string;
-  done: string[];
-  undone: string[];
+  /** 当天状态与复盘（计划 vs 完成的对照融在文字里，不单独成段）。 */
   state: string;
+  /** 当天整体情绪，单个 emoji；旧日记没有。 */
+  mood?: string;
+  /** 秘书寄语：一句鼓励或点评；旧日记没有。 */
+  cheer?: string;
+  updatedAt: string;
+}
+
+export interface WeeklyLog {
+  /** ISO 周键，如 "2026-W37"（周一为一周开始）。 */
+  week: string;
+  /** 本周起止本地日历日：from 周一，to 周日。 */
+  from: string;
+  to: string;
+  /** 这周完成了什么。 */
+  done: string;
+  /** 这周没做完什么。 */
+  undone: string;
+  /** 下周建议。 */
+  next: string;
   updatedAt: string;
 }
 
@@ -55,6 +72,8 @@ export interface Settings {
   model: string;
   /** 0–23，早晚分界小时：此小时之前算「早」，起算「晚」。 */
   daySplitHour: number;
+  /** 阿里云百炼 API Key（识别 qwen3-asr-flash + 朗读 qwen3-tts-flash）。空则用内置调试 Key。 */
+  asrAppKey?: string;
 }
 
 export type DebugEvent =
@@ -67,7 +86,8 @@ export type DebugEvent =
   | "todo_confirmed"
   | "todo_rejected"
   | "agent_stop"
-  | "parse_fail";
+  | "parse_fail"
+  | "notify";
 
 export interface DebugEntry {
   id: string;
@@ -136,6 +156,8 @@ export interface ParsedTask {
   estimate?: number;
   /** 项目标题，优先从现有项目里选。 */
   project?: string;
+  /** 把握（解析层仍输出，路由不再按它静默落库；全部进确认框）。 */
+  confidence?: "high" | "low";
 }
 
 export interface ProjectUpdate {

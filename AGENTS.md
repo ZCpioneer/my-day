@@ -4,18 +4,20 @@
 
 「AI 日程秘书」是一个面向作者本人使用的单用户 Android 应用：以**专业可靠的 AI 秘书**为人设，帮你整理日常所有事情——随口说，它记住、抽待办、排优先级。核心闭环是**一天**：早上立计划，白天随时聊并抽出待办，晚上对照完成情况生成当日日记。
 
-- 界面：Vue 3 + TypeScript + Vite，手机宽度，四个底栏入口（对话 / 待办 / 日记 / 设置）
+- 界面：Vue 3 + TypeScript + Vite，手机宽度，四个底栏入口（对话 / 待办 / 日记 / 设置）。视觉是「晨光浅色」（雾灰底 + 米白卡片 + 沉稳蓝），变量与规则都在 `src/styles.css`。
 - 壳：Capacitor 7，仅 Android（`appId: com.aisecretary.app`，见 `capacitor.config.ts`），产物为可侧载的 APK，不上架
 - 模型：DeepSeek 开放平台，OpenAI 兼容的 Chat Completions + Tool Calls，默认模型 `deepseek-v4-flash`（`src/types.ts` 里的 `DEFAULT_MODEL`）
-- 数据全部在本机：聊天 / 待办 / 日记 / 事件 / 项目 / 等待存 IndexedDB（单库 `ai-secretary`，v1，见 `src/storage/db.ts`）；设置（API Key、模型、早晚分割小时）存 Capacitor Preferences（Web 端回退 localStorage，见 `src/storage/settings.ts`）
-- 网络：原生端必须走 `CapacitorHttp`（`capacitor.config.ts` 已启用；浏览器 `fetch` 直连 `api.deepseek.com` 会跨域失败），由 `src/api/post-json.ts` 的 `activePostJson()` 按平台选择
+- 数据全部在本机：聊天 / 待办 / 日记 / 事件 / 项目 / 等待 / 周报存 IndexedDB（单库 `ai-secretary`，**v2**，见 `src/storage/db.ts`）；设置（API Key、模型、早晚分割小时、语音 Key）存 Capacitor Preferences（Web 端回退 localStorage，见 `src/storage/settings.ts`）
+- 网络：DeepSeek 全平台裸 `fetch`（CORS 已放开）。`capacitor.config.ts` 关掉 `CapacitorHttp` 的 fetch patch——patch 会把响应缓冲完才返回，破坏 SSE 流式。`activePostJson()` 一律返回 fetch；`nativePostJson`（CapacitorHttp）只给百炼 ASR / TTS 在原生端 fetch 被 CORS 挡住时兜底。
+- 提醒：`@capacitor/local-notifications`（官方插件，全本地不外发），规划逻辑在 `src/notify.ts`
+- 语音：对话页顶部分段「文字对话 / 语音模式」。文字模式纯打字；语音模式开口即录、停顿约 1 秒提交（VAD 在 `src/speech/vad.ts`），阿里云百炼 `qwen3-asr-flash` 转写（`src/api/dashscope-asr.ts`，一次 POST，音频走 wav data URI；不走流式 WebSocket），同一条对话线程里出字；回复整句落库后用百炼 `qwen3-tts-flash` 合成（`src/api/dashscope-tts.ts`，音色 Cherry），`HTMLAudioElement` 播放（`src/speech/tts.ts`）。录音：WebView 内 MediaRecorder → 16k 单声道 WAV → base64（`src/speech/`）。凭证只留一个 `asrAppKey`（百炼 API Key，识别与朗读共用）存设置，空则回退 `DEFAULT_DEBUG_ASR_KEY`（`effectiveAsrKey`）。原生 Manifest 必须同时有 `RECORD_AUDIO` 和 `MODIFY_AUDIO_SETTINGS`（Capacitor 的 `onPermissionRequest` 会两个一起要，缺后者时系统已授权麦克风也会被当成整次拒绝）。WebView 权限弹窗由 Capacitor 7 `BridgeWebChromeClient` 处理，MainActivity 不用改
 
-前身是「朝暮」（appId `com.zhaomu.app`、库名 `zhaomu`）；2026-09-07 改名时底层标识全部更换，新旧应用数据不互通，新应用从零开始。
+前身是「朝暮」（appId `com.zhaomu.app`）；底层标识已全部更换，新旧应用数据不互通。
 
 ## 构建与测试命令
 
 ```bash
-npm run dev        # Vite 开发服务器（浏览器调试，fetch 会被 DeepSeek 跨域挡住，属预期）
+npm run dev        # Vite 开发服务器（DeepSeek 已支持 CORS，浏览器也可直连真实 API）
 npm run test       # vitest run（单元测试，一次性跑完；只跑 src/__tests__/）
 npm run test:watch # vitest 监听模式
 npm run eval:parse # 解析语料 eval：打真实 API，需 DEEPSEEK_API_KEY 环境变量，人工运行，不进 test
@@ -36,77 +38,85 @@ Android 打包：`npm run cap:sync` 后在 `android/` 下用 `./gradlew assemble
 ```
 src/
   main.ts              入口：native 平台加 .native class、启动键盘 inset、挂载 App
-  App.vue              根组件：四个 tab、Agent 装配（agentDeps）、跨日滚动、补日记、主动开场
-  styles.css           全局样式
-  types.ts             全部共享类型（ChatMessage / Todo / DailyLog / Settings / DebugEntry ...）
+  App.vue              根组件：四个 tab、Agent 装配（agentDeps）、跨日滚动、补日记、主动开场、
+                       解析回复并行（runParseSide / lastParseResult / proposeTail）、
+                       提醒重排（refreshReminders）
+  styles.css           全局样式（晨光浅色）
+  types.ts             全部共享类型（ChatMessage / Todo / DailyLog / WeeklyLog / Settings / DebugEntry ...）
   agent/
-    loop.ts            回复循环：组装上下文 → 调模型 → 执行工具 → 回传，上限 4 次模型调用
-    parse.ts           解析层：每条非 silent 输入先过独立解析调用，输出 ParseResult；失败不阻塞对话
-    route-parse.ts     解析产出路由：事实自动落库，tasks 只出确认候选
+    loop.ts            回复循环：组装上下文 → 调模型（有 completeStream 时流式）→ 执行工具 → 回传，上限 4 次模型调用
+    parse.ts           解析层：每条非 silent 输入过一次独立解析调用（与回复并行），输出 ParseResult；失败不阻塞对话
+    route-parse.ts     解析产出路由：事实自动落库；tasks 一律出确认候选（不按置信度静默落库）
     parse-corpus.ts    解析语料（随口一说/真正待办的判断基准；偏好/目标类应为「不落库」）
     parse-eval.ts      语料打分（scoreCase，纯函数）
-    tools.ts           回复循环工具定义：list_todos / set_today_plan
-    context.ts         Context Builder：三层摘要 + 按解析结果动态注入近期事件 + 历史截断 12 条
-    prompt.ts          秘书人设系统提示词 + 主动开场 kickoff 文案（中文）
-    compose-log.ts     晚：一次性调用生成 DailyLog（不走工具循环）
+    tools.ts           回复循环工具定义：list_todos / set_today_plan / propose_todos
+    context.ts         Context Builder：三层摘要 + 按上一轮解析结果动态注入近期事件 + 历史截断 12 条
+    prompt.ts          秘书人设系统提示词（极简、重点加粗）+ 早/晚主动开场 kickoff 文案 + 周报提示词（中文）
+    compose-log.ts     晚：一次性调用生成 DailyLog（状态复盘 state + 情绪层 mood/cheer；今日计划对照只作为输入，不单列成段）
+    compose-week.ts    周报：一次性调用聚合本周日记 + 待办完成情况生成 WeeklyLog
     compose-plan.ts    整理：一次性调用把待办重排成 today/later 两桶
     parse-json.ts      从模型输出里解析 JSON
   api/
-    deepseek.ts        Chat Completions 客户端、ApiError、按状态码给用户文案
-    post-json.ts       POST JSON 的平台抽象（CapacitorHttp / fetch）
+    deepseek.ts        Chat Completions 客户端（chatCompletions 非流式 / chatCompletionsStream 流式 SSE）、ApiError、按状态码给用户文案
+    sse.ts             增量 SSE 解析器（纯函数：任意切分 chunk → data 载荷，处理 [DONE] 与多行 data）
+    post-json.ts       POST JSON：activePostJson = fetch；nativePostJson = CapacitorHttp，仅 ASR / TTS 原生兜底
+    dashscope-asr.ts   百炼语音识别（qwen3-asr-flash，一次 POST 回全文）
+    dashscope-tts.ts   百炼语音合成（qwen3-tts-flash，一次 POST 回 wav URL）
   storage/
-    db.ts              IndexedDB 仓储（DB v1）：chatRepo / todoRepo / logRepo / eventRepo / projectRepo / waitingRepo
-    settings.ts        设置读写 + effectiveApiKey
-  screens/             ChatScreen / TodoScreen / DiaryScreen / SettingsScreen（.vue）
-  components/          DebugPanel / TodoConfirm / TodoRow / GroupSheet / LogCard（.vue）
+    db.ts              IndexedDB 仓储（DB v2：v2 新增 weekly store）：chatRepo / todoRepo / logRepo / eventRepo / projectRepo / waitingRepo / weeklyRepo
+    settings.ts        设置读写 + effectiveApiKey / effectiveAsrKey
+  notify.ts            提醒规划纯函数：今日桶带 due 待办 + 21:00 催日记 → ReminderSpec[]；Notifier 接口可注入
+  notify-capacitor.ts  LocalNotifications 薄封装（原生=真实现，web/测试=no-op）
+  screens/             ChatScreen（文字/语音分段、流式气泡、语音连续对话）/ TodoScreen / DiaryScreen（含周报区）/ SettingsScreen（.vue）
+  speech/              录音（recorder）/ 一句一停监听（listen）/ VAD / HTMLAudio 播放 / WAV 工具
+  components/          DebugPanel / TodoConfirm / TodoRow / GroupSheet / LogCard（可编辑）（.vue）
   debug/
     log.ts             屏幕可见的调试日志（debugLog），不写完整 API Key
     default-key.ts     内置默认调试 Key（被 .gitignore 忽略），见「安全注意事项」
     default-key.example.ts  入库的模板文件
   __tests__/           全部 vitest 用例 + setup.ts
-  其余顶层模块          dates / ritual / todos / todos-filter / chat-session / diary /
+  其余顶层模块          dates（含 weekKey/weekDates）/ ritual / todos / todos-filter / chat-session（含 shouldEveningGreet）/ diary /
                        ids / keys / keyboard-inset / todo-drag / build-info / rich-text /
                        norm（归一化）/ todo-meta（徽标文案）/ todo-groups（以后栏分区）
                        （纯函数小工具，均有对应测试）
-eval/                  解析语料 eval（真实 API，`npm run eval:parse`，不进 npm test）
+eval/                  真实 API eval（`npm run eval:parse`，不进 npm test）：parse.eval.test.ts 解析语料、diary-mood.eval.test.ts 日记情绪层
 android/               Capacitor 生成的原生工程
 dist/                  构建产物（cap sync 的 webDir）
 ```
 
 ## 关键架构规则（改动时必须遵守）
 
-- **数据分两层。** Timeline = `chats`（原始对话）+ `events`（结构化事实：event/decision），是事实来源；State = `todos` + `projects` + `waitings`（当前状态）。**不做长期记忆**：偏好/目标/感慨类输入不抽、不存（2026-09-06 起下线，改名时 memories store 已彻底移除）。
-- **每条非 silent 输入先过解析层**（`parse.ts` 的 `parseInput`，独立一次模型调用，只输出 JSON；会带最近 6 条对话做上下文，承接秘书的归类/拆分提问才解析得对），`route-parse.ts` 把产出分流：events/decisions/projects/waitings 自动落库；**tasks 必须弹确认框，用户确认后才落库**（确认框在 `App.vue` 的 `onPropose`，kind 为 later/today；确认前每条候选可展开「调整」改归属/截止/耗时/急）。解析失败只记 debug（`parse_fail`），对话照常。回复循环的秘书人设带「引导厘清」职责：新事默认当大任务问拆分、小事问归属哪摊事、独立任务直接记（`prompt.ts` 主动职责第 1 条）。
-- **回复循环不抽取，但可以提议。** loop 工具有 `list_todos` / `set_today_plan` / `propose_todos`（2026-09-07 加回：对话里谈好的事必须能提议落库，否则秘书只能嘴上说「记了」；`propose_todos` 仍走确认框、确认后经 `addTodos` 落库进「以后」，并按 `normKey` 跳过已有待办；`suggest_order` 已移除，见 `src/__tests__/loop.test.ts`）。硬规则：不得口头声称已记下，只能用工具提议（`prompt.ts`）。回复上下文由 `context.ts` 组装：项目/等待摘要 + 按本轮 ParseResult 动态选取的近期事件（`selectRelevantEvents`，纯闲聊不注入）+ 历史截断最近 12 条（`HISTORY_LIMIT`）。循环上限 `MAX_MODEL_CALLS = 4`。
-- **没有"帮你勾掉"的工具。** 勾选只发生在待办页；`write_daily_log` 这类工具已被有意移除（见 `src/__tests__/loop.test.ts` 的对应用例）。
-- 待办分两桶：`when: "today" | "later"`；字段缺失视为 today。分桶与快照逻辑集中在 `src/todos.ts`（`partitionTodos` / `applyTodayPlan` / `applyFullPlan`），标题去重忽略空白与大小写（统一入口 `src/norm.ts` 的 `normKey`，全仓库只此一份实现）。桶内手动顺序存 `Todo.order`（缺失按 `createdAt` 兜底），拖拽落点用 `applyMove` 一次性重写涉及桶的 order，仓储入口是 `todoRepo.move`。结构化字段 `priority` / `due` / `estimate`（分钟）/ `reason` / `projectId` 由解析层填充并落库，展示徽标用 `src/todo-meta.ts` 的 `todoMeta`（急/截止/约多久/项目，`isOverdue` 逾期标红）；对话上下文与 `list_todos` 工具结果里的待办摘要同样带这些属性（`context.ts` 的 `formatBucket`），模型追问才有依据。「以后」栏按项目分区展示（组 = 复用 `Project`，非真层级）：分区/进度/自动完成/组排序的纯函数在 `src/todo-groups.ts`（`partitionLater` / `syncProjectStatuses` / `applyProjectMove`），`applyMove` 的落点支持带 `projectId`（跨组拖拽即改归属）；组内最后一条勾掉组自动 done、来新任务自动回 active（`App.vue` 的 `syncProjects` 在所有任务变更点调用）。
-- 一天按**本地日历日**（`src/dates.ts` 的 `localDate`）划分，不要用 UTC 日期。早/晚由 `daySplitHour`（默认 12）切分，见 `src/ritual.ts`。
+- **数据分两层。** Timeline = `chats`（原始对话）+ `events`（结构化事实：event/decision），是事实来源；State = `todos` + `projects` + `waitings`（当前状态）。**不做长期记忆**：偏好/目标/感慨类输入不抽、不存，也不要重新加 memories store。
+- **解析与回复并行。** `runTurn` 里 `runParseSide` 挂起不 await、`runAgent` 立即开始，谁慢都不挡对方。解析（`parse.ts` 的 `parseInput`，独立一次模型调用，只输出 JSON；带最近 6 条对话做上下文）完成后才更新 `lastParseResult` 并走 `route-parse.ts` 分流：events/decisions/projects/waitings 自动落库；**tasks 一律进确认框**（`App.vue` 的 `onPropose`，确认前每条候选可展开「调整」改归属/截止/耗时/急），**不静默落库、没有自动记录提示条**。解析失败只记 debug（`parse_fail`），对话照常。确认框与回复循环的 `propose_todos` 共用互斥队列 `proposeTail`。**弹框前按 `normKey` 过滤已记录待办**（仅 kind 为 later 时；today 计划框里的条目本来就在清单里不能滤）：滤完没有新候选就直接不弹框。回复循环的秘书人设带「先聊清楚再记」：一摊事刚冒头只问一句、本轮还在提问时禁止 `propose_todos`；只有用户拆出具体步骤或明确说记下来才提议。不要把新事塞进现有项目，除非用户亲口说了归属。秘书说话极简：默认一两句、最多三句，重点用 `**加粗**`。解析层同样：刚冒头的栏目/项目不是 task，`project` 只有用户点名归属才填。
+- **回复循环不抽取，但可以提议。** loop 工具只有 `list_todos` / `set_today_plan` / `propose_todos`。不要加回 `suggest_order` 或其它排序工具。`propose_todos` 走确认框、确认后经 `addTodos` 落库进「以后」，并按 `normKey` 跳过已有待办。硬规则：不得口头声称已记下，只能用工具提议（`prompt.ts`）。回复上下文由 `context.ts` 组装：项目/等待摘要 + 按**上一轮** ParseResult 动态选取的近期事件（`selectRelevantEvents`，首轮/纯闲聊不注入；本轮提到的事下一轮才进注入）+ 历史截断最近 12 条（`HISTORY_LIMIT`）。循环上限 `MAX_MODEL_CALLS = 4`。**回复轮流式输出**：`AgentDeps.completeStream` 存在时优先走 `chatCompletionsStream`（SSE 解析在 `src/api/sse.ts`，tool_calls 分片按 index 重组），`onReplyDelta` 把累积文本推到 ChatScreen 的流式气泡（不落库、不进消息数组，`runAgent` 返回后先撤气泡再追加正式消息）；工具轮/silent 轮无文本天然不出气泡。解析、整理、日记、周报等一次性调用仍非流式。请求显式带 `thinking: { type: "disabled" }`。
+- **没有"帮你勾掉"的工具。** 勾选只发生在待办页；不要加回 `write_daily_log` 这类会在对话里写日记或改勾选的工具。
+- 待办分两桶：`when: "today" | "later"`；字段缺失视为 today。分桶与快照逻辑集中在 `src/todos.ts`（`partitionTodos` / `applyTodayPlan` / `applyFullPlan`），标题去重忽略空白与大小写（统一入口 `src/norm.ts` 的 `normKey`，全仓库只此一份实现）。桶内手动顺序存 `Todo.order`（缺失按 `createdAt` 兜底），拖拽落点用 `applyMove` 一次性重写涉及桶的 order，仓储入口是 `todoRepo.move`。结构化字段 `priority` / `due` / `estimate`（分钟）/ `reason` / `projectId` 由解析层填充并落库，展示徽标用 `src/todo-meta.ts` 的 `todoMeta`（急/截止/约多久/项目，`isOverdue` 逾期标红）；对话上下文与 `list_todos` 工具结果里的待办摘要同样带这些属性（`context.ts` 的 `formatBucket`）。「以后」栏按项目分区展示（组 = 复用 `Project`，非真层级）：分区/进度/自动完成/组排序的纯函数在 `src/todo-groups.ts`（`partitionLater` / `syncProjectStatuses` / `applyProjectMove`），`applyMove` 的落点支持带 `projectId`（跨组拖拽即改归属）；组内最后一条勾掉组自动 done、来新任务自动回 active（`App.vue` 的 `syncProjects` 在所有任务变更点调用）。
+- 一天按**本地日历日**（`src/dates.ts` 的 `localDate`）划分，不要用 UTC 日期。早/晚由 `daySplitHour`（默认 12）切分，见 `src/ritual.ts`。周报按 **ISO 周**（周一起、本地时区）划分，周键 `weekKey` / 周日期 `weekDates` 在 `src/dates.ts`。
 - 确认今日计划后会关闭当前对话段（`chatRepo.closeSession`），旧消息进 `DayChat.archive`，日记仍读归档。
-- 昨日日记每轮注入对话上下文（`runTurn` 里 `logRepo.get(昨天)` → `runAgent` 的 `yesterdayLog`）；当天对话完全空白时（`chat-session.ts` 的 `shouldGreet`）Agent 主动开场一次：kickoff 文案 `KICKOFF_TEXT` 只进 API 调用，不落用户气泡（`runTurn` 的 `silent` 选项，silent 轮跳过解析）。
-- 日记页不只显示今天：`logs` 按日期存全部日记，页面上方是今天（缺失时显示空态 + 「整理成日记」），下方「以往」区按日期倒序列出历史日记，默认折叠只显示日期，点击展开完整卡片（`LogCard`）。数据由 App 侧 `refreshPastLogs`（`logRepo.list()` 排除今天）在启动、跨日、补日记成功后刷新。
-- API 请求**非流式**，且显式带 `thinking: { type: "disabled" }`。
-- 数据存储就用 IndexedDB + Capacitor Preferences 这两套，不要新加 SQLite 或本地文件存储。
+- 昨日日记每轮注入对话上下文（`runTurn` 里 `logRepo.get(昨天)` → `runAgent` 的 `yesterdayLog`）；当天对话完全空白时（`chat-session.ts` 的 `shouldGreet`）Agent 主动开场一次：按时段选文案——`shouldEveningGreet`（本地小时 ≥ 18 且当天还没日记）成立用 `EVENING_KICKOFF_TEXT`（对照早上计划逐条问进展），否则用 `KICKOFF_TEXT`；kickoff 文案只进 API 调用，不落用户气泡（`runTurn` 的 `silent` 选项，silent 轮跳过解析）。
+- 日记页不只显示今天：`logs` 按日期存全部日记，页面上方是今天（缺失时显示空态 + 「整理成日记」），中间「周报」区（本周未生成显示「生成本周周报」，已生成显示卡片 + 重新生成；`compose-week.ts` 聚合本周日记 + 待办完成情况落 `weeklyRepo`），下方「以往」区按日期倒序列出历史日记，默认折叠只显示日期，点击展开完整卡片（`LogCard`）。日记可编辑：`LogCard` 编辑模式只改模型写的文字（state/mood/cheer），保存经 App 侧 `logRepo.put` 落库并刷新双区。数据由 App 侧 `refreshPastLogs`（`logRepo.list()` 排除今天）在启动、跨日、补日记成功后刷新。
+- **本地通知提醒**：`src/notify.ts` 的 `planReminders` 纯函数输出 ReminderSpec[]——今日桶未完成待办带 due 的（带时间到点提醒、纯日期当天 9:00，过期跳过）+ 今天没日记时 21:00 催日记；调度策略是先 `cancelAll` 再全量 `schedule`（`rescheduleReminders`），有东西要挂才懒请求权限，拒绝/失败只记 debug（`DebugEvent` 有 `"notify"`）。重排时机：启动、今日计划确认、`syncProjects`（所有任务变更汇聚点）、跨日、日记写完（撤掉当晚催日记）。非原生平台 no-op。
+- 数据存储就用 IndexedDB + Capacitor Preferences 这两套，不要新加 SQLite 或本地文件存储。不要引入会外发数据的第三方服务（含 Google Fonts 这类远程字体）。
 
 ## 代码风格
 
 - TypeScript strict 模式，ES 模块，`@/` 别名指向 `src/`（vite、vitest、tsconfig 三处都已配）。
 - Vue 单文件组件用 `<script setup lang="ts">`。
 - 注释、提交信息、面向用户的文案（包括错误提示和模型提示词）都用**中文**。
-- 业务规则尽量写成不依赖框架的纯函数（如 `todos.ts`、`ritual.ts`、`chat-session.ts`），UI / 存储 / 网络只做薄封装，方便直接单测。
-- 副作用可注入：仓储、网络、时间都通过参数传入（如 `AgentDeps`、`Prefs`、`PostJson`），测试里替换。
+- 业务规则尽量写成不依赖框架的纯函数（如 `todos.ts`、`ritual.ts`、`chat-session.ts`、`notify.ts`），UI / 存储 / 网络只做薄封装，方便直接单测。
+- 副作用可注入：仓储、网络、时间都通过参数传入（如 `AgentDeps`、`Prefs`、`PostJson`、`Notifier`），测试里替换。
 
 ## 测试
 
 - 框架：vitest + happy-dom + @vue/test-utils（见 `vitest.config.ts`）；`src/__tests__/setup.ts` 引入 `fake-indexeddb/auto`，所以仓储层（IndexedDB）可以在测试里直接用真实现。
 - 用例全部在 `src/__tests__/`，命名 `*.test.ts`，与被测模块同名（如 `todos.test.ts` ↔ `todos.ts`）。
-- 测试里通过注入假的 `complete` / `postJson` / `now` 来驱动，不打真实网络。App 级用例 mock `chatCompletions` 时注意：其参数是 `{ apiKey, request, postJson }` 包装，解析调用（`tools: []`）与回复调用（带工具）按此区分；`beforeEach` 垫一条消息可避免主动开场抢 `awaiting`。
+- 测试里通过注入假的 `complete` / `completeStream` / `postJson` / `now` / `Notifier` 来驱动，不打真实网络。App 级用例 mock `@/api/deepseek` 时**必须同时 mock `chatCompletions` 与 `chatCompletionsStream`**（回复轮有 completeStream 时走后者，漏 mock 会打到真实 fetch）：其参数是 `{ apiKey, request, postJson }` 包装，解析调用（`tools: []`）与回复调用（带工具）按此区分；`beforeEach` 垫一条消息可避免主动开场抢 `awaiting`。
 - 新增或修改业务规则时，同步更新对应测试；UI 变更优先考虑屏幕级测试（如 `chat-screen.test.ts`、`todos-screen.test.ts`）。
 - 解析判断的稳定性由语料保证：`src/agent/parse-corpus.ts` 是基准，`parse-corpus.test.ts` 验完整性（进 `npm run test`），`eval/parse.eval.test.ts` 用真实 API 打分（人工跑，模型可用 `EVAL_MODEL` 环境变量覆盖）。
-- 当前基线：41 个测试文件、222 个用例全部通过（`npm run test`，2026-09-07 核实）。
 
 ## 安全注意事项
 
-- **`src/debug/default-key.ts` 含一把真实的默认调试 API Key，文件头标注 `DEBUG ONLY，正式发布前删除`。** 该文件在 `.gitignore` 中（入库的是模板 `default-key.example.ts`）——不要 `git add` 它，不要把 Key 复制进其他文件、文档或日志。
+- **`src/debug/default-key.ts` 含真实的默认调试 Key（DeepSeek `DEFAULT_DEBUG_KEY`、百炼语音 `DEFAULT_DEBUG_ASR_KEY`），文件头标注 `DEBUG ONLY，正式发布前删除`。** 该文件在 `.gitignore` 中（入库的是模板 `default-key.example.ts`）——不要 `git add` 它，不要把 Key 复制进其他文件、文档或日志。
 - 任何日志（包括屏幕 Debug 面板）只能显示掩码后的 Key（`src/keys.ts` 的 `maskKey`，最多前 4 位），绝不打全文。
-- 用户 Key 只存本机（Capacitor Preferences），只发往 `https://api.deepseek.com`；不要引入会外发数据的第三方服务。
+- 用户 Key 只存本机（Capacitor Preferences），对话发往 `https://api.deepseek.com`，语音识别发往 `https://dashscope.aliyuncs.com`；不要引入会外发数据的第三方服务。
 - 正式发布前必须删除默认 Key，改为强制用户自备。

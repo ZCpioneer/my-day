@@ -21,9 +21,12 @@
         v-if="tab === 'chat'"
         :messages="chat.messages"
         :awaiting="awaiting"
+        :streaming-reply="streamingReply"
         :pending-propose="pendingPropose"
         :propose-kind="proposeKind"
         :existing-projects="projects.map((p) => p.title)"
+        :recognize="onRecognize"
+        :speak-reply="onSpeakReply"
         @send="onSend"
         @tidy="onTidy"
         @confirm="onConfirmPropose"
@@ -47,7 +50,12 @@
         :daily="daily"
         :past-logs="pastLogs"
         :composing="composingDiary"
+        :weekly="weekly"
+        :composing-weekly="composingWeekly"
+        :weekly-error="weeklyError"
         @compose="onComposeDiary"
+        @compose-weekly="onComposeWeekly"
+        @save="onSaveLog"
       />
       <SettingsScreen v-else :settings="settings" @save="onSaveSettings" />
     </div>
@@ -82,25 +90,31 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { composeDailyLog } from "@/agent/compose-log";
 import { composePlan } from "@/agent/compose-plan";
+import { composeWeeklyLog } from "@/agent/compose-week";
 import { runAgent, type AgentDeps } from "@/agent/loop";
 import { parseInput } from "@/agent/parse";
 import { routeParseResult, type RouteDeps } from "@/agent/route-parse";
-import { KICKOFF_TEXT } from "@/agent/prompt";
-import { ApiError, chatCompletions, type ChatCompletionRequest } from "@/api/deepseek";
+import { EVENING_KICKOFF_TEXT, KICKOFF_TEXT } from "@/agent/prompt";
+import { ApiError, chatCompletions, chatCompletionsStream, type ChatCompletionRequest } from "@/api/deepseek";
 import { activePostJson } from "@/api/post-json";
+import { recognizeSpeech } from "@/api/dashscope-asr";
+import { synthesizeSpeech } from "@/api/dashscope-tts";
+import { playAudio, textForSpeech } from "@/speech/tts";
 import ChatScreen from "@/screens/ChatScreen.vue";
 import TodoScreen from "@/screens/TodoScreen.vue";
 import DiaryScreen from "@/screens/DiaryScreen.vue";
 import SettingsScreen from "@/screens/SettingsScreen.vue";
-import { shouldGreet } from "@/chat-session";
+import { shouldEveningGreet, shouldGreet } from "@/chat-session";
 import { catchUpDiary } from "@/diary";
-import { dayLabel, localDate, shiftLocalDate } from "@/dates";
+import { dayLabel, localDate, shiftLocalDate, weekKey } from "@/dates";
 import { debugLog } from "@/debug/log";
 import { newId } from "@/ids";
 import { normKey } from "@/norm";
+import { rescheduleReminders } from "@/notify";
+import { createNotifier } from "@/notify-capacitor";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
-import { chatRepo, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
-import { effectiveApiKey, loadSettings, saveSettings } from "@/storage/settings";
+import { chatRepo, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo, weeklyRepo } from "@/storage/db";
+import { effectiveApiKey, effectiveAsrKey, loadSettings, saveSettings } from "@/storage/settings";
 import { syncProjectStatuses } from "@/todo-groups";
 import {
   DEFAULT_MODEL,
@@ -114,6 +128,7 @@ import {
   type Settings,
   type Todo,
   type Waiting,
+  type WeeklyLog,
 } from "@/types";
 
 type Tab = "chat" | "todo" | "diary" | "settings";
@@ -131,9 +146,17 @@ const date = ref(localDate());
 const chat = ref<DayChat>({ date: date.value, messages: [] });
 const daily = ref<DailyLog | null>(null);
 const pastLogs = ref<DailyLog[]>([]);
+const weekly = ref<WeeklyLog | null>(null);
+const composingWeekly = ref(false);
+const weeklyError = ref("");
 const pendingPropose = ref<ProposedTodo[] | null>(null);
 const proposeKind = ref<"later" | "today">("later");
 const awaiting = ref(false);
+// 流式回复中的逐字文本：只进流式气泡，不落库、不进消息数组；null = 不在流式。
+const streamingReply = ref<string | null>(null);
+// 上一轮输入的解析结果。解析与回复并行后，回复等不起本轮解析，上下文的事件注入改用上一轮的——
+// 本轮提到的事下一轮才进注入，这是并行化有意接受的取舍；首轮为 null，等同原来的「纯闲聊不注入」分支。
+const lastParseResult = ref<ParseResult | null>(null);
 const composingDiary = ref(false);
 const catchUpNote = ref("");
 const activeSession = ref<"morning" | "evening">(ritualForNow());
@@ -149,11 +172,16 @@ async function loadDay(d: string) {
   chat.value = await chatRepo.get(d);
   daily.value = await logRepo.get(d);
   await refreshPastLogs();
+  await refreshWeekly();
 }
 
 async function refreshPastLogs() {
   const all = await logRepo.list();
   pastLogs.value = all.filter((l) => l.date !== date.value);
+}
+
+async function refreshWeekly() {
+  weekly.value = await weeklyRepo.get(weekKey(new Date()));
 }
 
 const ready = (async () => {
@@ -166,6 +194,7 @@ const ready = (async () => {
 void (async () => {
   await ready;
   await runCatchUp();
+  await refreshReminders();
   await maybeGreet();
 })();
 
@@ -176,6 +205,45 @@ async function complete(req: ChatCompletionRequest) {
     throw new ApiError("no key", 401, "去设置里粘贴 DeepSeek API Key");
   }
   return chatCompletions({ apiKey: key, request: req, postJson: activePostJson() });
+}
+
+async function completeStream(req: ChatCompletionRequest, onText: (accumulated: string) => void) {
+  const key = effectiveApiKey(settings.value);
+  if (!key) {
+    debugLog.push({ event: "http_fail", detail: "no key", status: 401 });
+    throw new ApiError("no key", 401, "去设置里粘贴 DeepSeek API Key");
+  }
+  return chatCompletionsStream({ apiKey: key, request: { ...req, stream: true }, onText });
+}
+
+// 语音输入：录音已在 ChatScreen 侧完成，这里只负责拿设置里的凭证去识别。
+async function onRecognize(wavBase64: string): Promise<string> {
+  try {
+    return await recognizeSpeech({
+      apiKey: effectiveAsrKey(settings.value) ?? "",
+      wavBase64,
+    });
+  } catch (e) {
+    debugLog.push({ event: "http_fail", detail: `asr: ${e instanceof Error ? e.message : "unknown"}` });
+    throw e;
+  }
+}
+
+async function onSpeakReply(text: string, signal?: AbortSignal): Promise<void> {
+  const said = textForSpeech(text);
+  if (!said || signal?.aborted) return;
+  try {
+    const url = await synthesizeSpeech({
+      apiKey: effectiveAsrKey(settings.value) ?? "",
+      text: said,
+      signal,
+    });
+    if (signal?.aborted) return;
+    await playAudio(url, signal);
+  } catch (e) {
+    if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return;
+    debugLog.push({ event: "http_fail", detail: `tts: ${e instanceof Error ? e.message : "unknown"}` });
+  }
 }
 
 async function refreshState() {
@@ -192,6 +260,21 @@ async function syncProjects() {
     if (next[i] !== projects.value[i]) await projectRepo.put(next[i]);
   }
   await refreshState();
+  // 任务变更汇聚点：勾选/删除/移动/落库都会走到这里，顺手重排提醒。
+  await refreshReminders();
+}
+
+// 本地通知出口：原生走 Capacitor 封装，web/测试是 no-op（测试里 mock @/notify-capacitor 替换）。
+const notifier = createNotifier();
+
+// 重排提醒：策略（先全清再全量挂）在 notify.ts 的 rescheduleReminders；这里只喂当前状态。
+// 失败只记 debug，绝不影响主流程。
+async function refreshReminders() {
+  try {
+    await rescheduleReminders(notifier, { todos: todos.value, hasLogToday: !!daily.value, now: new Date() });
+  } catch (e) {
+    debugLog.push({ event: "notify", detail: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 const routeDeps: RouteDeps = {
@@ -216,11 +299,12 @@ async function resolveProjectId(title?: string): Promise<string | undefined> {
   return created.id;
 }
 
-async function addTodos(items: ProposedTodo[]) {
+async function addTodos(items: ProposedTodo[]): Promise<Todo[]> {
   const sourceDate = localDate();
   const createdAt = new Date().toISOString();
+  const created: Todo[] = [];
   for (const item of items) {
-    await todoRepo.add({
+    const todo: Todo = {
       id: newId(),
       title: item.title,
       status: "open",
@@ -232,18 +316,41 @@ async function addTodos(items: ProposedTodo[]) {
       estimate: item.estimate,
       reason: item.reason,
       projectId: await resolveProjectId(item.project),
-    });
+    };
+    await todoRepo.add(todo);
+    created.push(todo);
   }
   todos.value = await todoRepo.list();
   await syncProjects();
+  return created;
 }
 
+// 确认框互斥：解析与回复并行后两边可能同时想弹框（解析的 tasks、回复循环的工具），
+// 排队一个一个弹，否则后者会顶掉 pendingPropose/proposeResolve，前一个 Promise 永远悬空。
+let proposeTail: Promise<void> = Promise.resolve();
+
 function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
-  proposeKind.value = kind;
-  pendingPropose.value = items;
-  return new Promise((resolve) => {
-    proposeResolve = resolve;
+  const run = proposeTail.then(async () => {
+    // 记重型过滤（只对「新记入」生效；今日计划确认框里的条目本来就在清单里，不能滤）：
+    // 解析侧和回复循环可能先后对同一件事弹确认框——按 normKey 滤掉已记过的，
+    // 滤完没有新东西就不弹框，直接返回空数组。
+    let fresh = items;
+    if (kind === "later") {
+      const existing = new Set(todos.value.map((t) => normKey(t.title)));
+      fresh = items.filter((i) => !existing.has(normKey(i.title)));
+      if (fresh.length === 0) return [];
+    }
+    return new Promise<ProposedTodo[]>((resolve) => {
+      proposeKind.value = kind;
+      pendingPropose.value = fresh;
+      proposeResolve = resolve;
+    });
   });
+  proposeTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 async function setTodayPlan(items: ProposedTodo[]) {
@@ -252,6 +359,8 @@ async function setTodayPlan(items: ProposedTodo[]) {
   chat.value = await chatRepo.get(date.value);
   todos.value = await todoRepo.list();
   closedThisTurn = true;
+  // 今日计划确认后重排提醒（整理路径 applyAcceptedPlan 由 syncProjects 覆盖）。
+  await refreshReminders();
 }
 
 async function applyAcceptedPlan(items: ProposedTodo[]) {
@@ -269,9 +378,12 @@ async function applyAcceptedPlan(items: ProposedTodo[]) {
 
 const agentDeps: AgentDeps = {
   complete,
+  completeStream,
   listTodos: () => todoRepo.list(),
   setTodayPlan,
-  addTodos,
+  addTodos: async (items) => {
+    await addTodos(items);
+  },
   now: () => new Date(),
   onPropose,
 };
@@ -298,13 +410,51 @@ async function appendMessage(msg: ChatMessage) {
   chat.value = await chatRepo.get(date.value);
 }
 
+// 解析侧整条链路：解析 → 更新 lastParseResult → 分流落库 → 任务一律弹确认框。
+// runTurn 把它挂起不 await（finally 才等它收尾），与回复循环并行；自带兜底 catch——
+// parseInput 本身不抛异常，这里防的是分流/落库/确认出错：只记 parse_fail，绝不影响对话。
+async function runParseSide(userText: string, messageId: string, history: ChatMessage[]) {
+  try {
+    const parseResult = await parseInput({
+      text: userText,
+      date: date.value,
+      todos: todos.value,
+      projects: projects.value,
+      model: settings.value.model,
+      // 最近几条对话做上下文：承接秘书的归类/拆分提问时才解析得对。
+      recent: history
+        .slice(-6)
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      complete,
+    });
+    lastParseResult.value = parseResult;
+    const routed = await routeParseResult(parseResult, { date: date.value, messageId }, routeDeps);
+    await refreshState();
+    if (routed.proposedTasks.length > 0) {
+      const accepted = await onPropose(routed.proposedTasks, "later");
+      if (accepted.length > 0) {
+        await addTodos(accepted);
+        debugLog.push({ event: "todo_confirmed", tool: "parse", detail: accepted.map((a) => a.title).join("、") });
+      } else {
+        debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
+      }
+    }
+  } catch (e) {
+    debugLog.push({ event: "parse_fail", detail: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boolean }) {
   await ready;
   if (awaiting.value) return;
   awaiting.value = true;
   closedThisTurn = false;
+  streamingReply.value = null;
   if (mode === "morning" || mode === "evening") activeSession.value = mode;
   const history = chat.value.messages;
+  // 解析侧与回复侧并行：两边都落定本轮才算完（finally 里等 parseDone）。
+  let parseDone: Promise<void> = Promise.resolve();
   try {
     let userMsg: ChatMessage | null = null;
     if (!opts?.silent) {
@@ -317,32 +467,9 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       };
       await appendMessage(userMsg);
     }
-    let parseResult: ParseResult | null = null;
     if (userMsg) {
-      parseResult = await parseInput({
-        text: userText,
-        date: date.value,
-        todos: todos.value,
-        projects: projects.value,
-        model: settings.value.model,
-        // 最近几条对话做上下文：承接秘书的归类/拆分提问时才解析得对。
-        recent: history
-          .slice(-6)
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-        complete,
-      });
-      const routed = await routeParseResult(parseResult, { date: date.value, messageId: userMsg.id }, routeDeps);
-      await refreshState();
-      if (routed.proposedTasks.length > 0) {
-        const accepted = await onPropose(routed.proposedTasks, "later");
-        if (accepted.length > 0) {
-          await addTodos(accepted);
-          debugLog.push({ event: "todo_confirmed", tool: "parse", detail: accepted.map((a) => a.title).join("、") });
-        } else {
-          debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
-        }
-      }
+      // 挂起不 await：解析一启动，回复循环立刻开始。silent 轮不触发解析（维持原样）。
+      parseDone = runParseSide(userText, userMsg.id, history);
     }
     const yesterdayLog = await logRepo.get(shiftLocalDate(date.value, -1));
     const { assistantText } = await runAgent({
@@ -355,9 +482,15 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       yesterdayLog,
       projects: projects.value,
       waitings: waitings.value,
-      parseResult,
+      // 事件注入用上一轮的解析结果；本轮的解析完会写进 lastParseResult，下一轮生效。
+      parseResult: lastParseResult.value,
       recentEvents: await eventRepo.listRecent(3),
+      onReplyDelta: (text) => {
+        streamingReply.value = text;
+      },
     });
+    // 流式气泡使命到此：先撤掉再落最终消息，避免两个气泡同框
+    streamingReply.value = null;
     if (closedThisTurn) return;
     await appendMessage({
       id: newId(),
@@ -367,6 +500,7 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       mode,
     });
   } catch (e) {
+    streamingReply.value = null;
     if (closedThisTurn) return;
     const userMessage = e instanceof ApiError ? e.userMessage : "模型这轮没回上，再说一次";
     if (!(e instanceof ApiError)) {
@@ -380,7 +514,10 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       mode,
     });
   } finally {
+    // 两边都结束本轮才算完：解析侧可能还停在确认框上等用户，等它落定再解锁输入
+    await parseDone;
     awaiting.value = false;
+    streamingReply.value = null;
     if (proposeResolve) settlePropose([]);
   }
 }
@@ -451,7 +588,9 @@ async function maybeGreet() {
   if (awaiting.value || pendingPropose.value) return;
   if (!effectiveApiKey(settings.value)) return;
   if (!shouldGreet(chat.value)) return;
-  await runTurn(activeSession.value, KICKOFF_TEXT, { silent: true });
+  // 晚上（18 点起）且今天还没写日记：换成晚间开场，对照早计划逐条问进展。
+  const evening = shouldEveningGreet(new Date(), chat.value, daily.value !== null);
+  await runTurn(activeSession.value, evening ? EVENING_KICKOFF_TEXT : KICKOFF_TEXT, { silent: true });
 }
 
 async function onComposeDiary() {
@@ -470,6 +609,8 @@ async function onComposeDiary() {
     });
     await logRepo.put(log);
     if (log.date === date.value) daily.value = log;
+    // 日记已写好，今晚的催写日记提醒可以撤了。
+    await refreshReminders();
   } catch (e) {
     const userMessage = e instanceof ApiError ? e.userMessage : "日记这轮没写成";
     debugLog.push({
@@ -479,6 +620,41 @@ async function onComposeDiary() {
     catchUpNote.value = userMessage;
   } finally {
     composingDiary.value = false;
+  }
+}
+
+// 手改日记（LogCard 编辑保存）：落库后今天卡片与以往区一起刷。
+async function onSaveLog(log: DailyLog) {
+  await ready;
+  await logRepo.put(log);
+  if (log.date === date.value) daily.value = log;
+  await refreshPastLogs();
+}
+
+async function onComposeWeekly() {
+  await ready;
+  if (composingWeekly.value) return;
+  composingWeekly.value = true;
+  weeklyError.value = "";
+  try {
+    const log = await composeWeeklyLog({
+      now: new Date(),
+      logs: await logRepo.list(),
+      todos: await todoRepo.list(),
+      complete,
+      model: settings.value.model,
+    });
+    await weeklyRepo.put(log);
+    weekly.value = log;
+  } catch (e) {
+    const userMessage = e instanceof ApiError ? e.userMessage : "周报这轮没生成";
+    debugLog.push({
+      event: "http_fail",
+      detail: e instanceof Error ? e.message : String(e),
+    });
+    weeklyError.value = userMessage;
+  } finally {
+    composingWeekly.value = false;
   }
 }
 
@@ -493,6 +669,8 @@ async function rollToTodayIfNeeded() {
   activeSession.value = session;
   await ready;
   await loadDay(next);
+  // 提醒是按天算的（今晚 21 点写日记、今天的 due），跨日必须重排。
+  await refreshReminders();
   return true;
 }
 

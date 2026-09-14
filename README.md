@@ -7,10 +7,10 @@
 核心闭环是**一天**：
 
 - **早上**：秘书主动开场，跟你聊几句，把今天要做的事立成计划。
-- **白天**：想到什么随时说——"下周三要交报告"、"记得给车加油"。秘书会听懂这些话，把里面的事抽出来，**弹个确认框问你要不要记**，你点头才进待办。
+- **白天**：想到什么随时说——"下周三要交报告"、"记得给车加油"。文字或语音都行。秘书会听懂这些话，把里面的事抽出来，**弹个确认框问你要不要记**，你点头才进待办。
 - **晚上**：对照今天的计划和实际完成情况，自动生成一篇当日日记。
 
-界面就四个底栏：**对话 / 待办 / 日记 / 设置**。
+界面就四个入口：**对话 / 待办 / 日记 / 设置**。
 
 ## 它是怎么工作的
 
@@ -22,25 +22,27 @@
    - **时间线**（事实来源）：原始对话 + 结构化事实（事件 / 决定）。
    - **当前状态**：待办（分「今天 / 以后」两桶，可按项目分区、拖拽排序）、项目、等待中的事。
    - 没有"长期记忆"——偏好、感慨这类话不抽不存，避免越攒越乱。
-4. **数据全在你手机里**：聊天、待办、日记都存在本机 IndexedDB，API Key 只存本机、只发给 DeepSeek 官方接口。没有任何第三方数据外发。
+4. **数据全在你手机里**：聊天、待办、日记都存在本机 IndexedDB，API Key 只存本机。对话发给 DeepSeek，语音识别和朗读发给阿里云百炼，没有其它第三方数据外发。
 
 ## 技术栈
 
 - 界面：Vue 3 + TypeScript + Vite，手机宽度
 - 壳：Capacitor 7，仅 Android，产物是可侧载的 APK（不上架）
 - 模型：DeepSeek 开放平台（OpenAI 兼容的 Chat Completions + Tool Calls）
+- 语音：百炼 `qwen3-asr-flash` 转写 + `qwen3-tts-flash` 朗读
+- 提醒：本机 Local Notifications（今日 due + 晚上催日记）
 - 存储：IndexedDB + Capacitor Preferences，全部本地
 
 ## 常用命令
 
 ```bash
-npm run dev        # 浏览器开发调试（直连 API 会跨域失败，属预期）
+npm run dev        # 浏览器开发调试（DeepSeek 已放开 CORS，浏览器也可直连）
 npm run test       # 单元测试
 npm run build      # 类型检查 + 打包到 dist/
 npm run cap:sync   # 打包并同步进 Android 工程
 ```
 
-打 APK：`npm run cap:sync` 后在 `android/` 下 `./gradlew assembleDebug`。
+打 APK：`npm run cap:sync` 后在 `android/` 下 `./gradlew assembleDebug`。推送到手机见 `.kimi-code/skills/deploy-phone/`。
 
 ## 说明
 

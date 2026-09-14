@@ -21,6 +21,11 @@
         <input v-model.number="draft.daySplitHour" type="number" min="0" max="23" step="1" />
         <p class="hint">给对话一点时间感（现在像早上还是晚上）。自动整理确认后会清空这段对话。日记在日记页。默认 12。</p>
       </label>
+      <label class="field">
+        <span>语音 API Key</span>
+        <input v-model="draft.asrAppKey" type="password" autocomplete="off" placeholder="留空则用内置调试 Key" />
+        <p class="hint">识别和朗读共用（阿里云百炼）。可以自己贴 Key。不填就用内置的调试 Key。</p>
+      </label>
       <button class="btn-save" type="button" @click="onSave">保存</button>
       <DebugPanel />
       <p class="hint">{{ BUILD_LABEL }}</p>
