@@ -1,4 +1,4 @@
-import { normKey } from "./norm";
+import { normKey, titlesOverlap } from "./norm";
 import type { ProposedTodo } from "./types";
 
 export function filterTodayPlanItems(proposed: ProposedTodo[]): ProposedTodo[] {
@@ -54,4 +54,68 @@ export function filterPlanItems(raw: unknown): { today: ProposedTodo[]; later: P
   const laterNorm = new Set(later.map((t) => normKey(t.title)));
   const extra = spilled.filter((t) => !laterNorm.has(normKey(t.title)));
   return { today: kept, later: [...extra, ...later] };
+}
+
+function longerTitle(a: string, b: string): string {
+  return normKey(b).length > normKey(a).length ? b : a;
+}
+
+/** 互相包含的候选合成一条：留更长的标题；有一条在今天就进今天。 */
+export function mergeOverlappingProposed(items: ProposedTodo[]): ProposedTodo[] {
+  const out: ProposedTodo[] = [];
+  for (const raw of items) {
+    const title = raw.title.trim();
+    if (!normKey(title)) continue;
+    const idx = out.findIndex((o) => titlesOverlap(o.title, title));
+    if (idx < 0) {
+      out.push({ ...raw, title });
+      continue;
+    }
+    const prev = out[idx];
+    const incomingLonger = normKey(title).length > normKey(prev.title).length;
+    const primary = incomingLonger ? raw : prev;
+    const secondary = incomingLonger ? prev : raw;
+    out[idx] = {
+      ...secondary,
+      ...primary,
+      title: longerTitle(prev.title, title),
+      when: prev.when === "today" || raw.when === "today" ? "today" : "later",
+      project: primary.project ?? secondary.project,
+      reason: primary.reason ?? secondary.reason,
+      priority: primary.priority ?? secondary.priority,
+      due: primary.due ?? secondary.due,
+      estimate: primary.estimate ?? secondary.estimate,
+    };
+  }
+  return out;
+}
+
+/**
+ * 进确认框前丢掉已被清单盖住的候选。
+ * 全字相同：未完成和已完成都挡。包含关系：只对未完成。
+ * 同一批里互相包含时留更长的那句。
+ */
+export function withoutCoveredTitles(
+  candidates: ProposedTodo[],
+  existing: { title: string; status?: string }[],
+): ProposedTodo[] {
+  const exact = new Set(existing.map((t) => normKey(t.title)).filter(Boolean));
+  const openTitles = existing.filter((t) => (t.status ?? "open") === "open").map((t) => t.title);
+  const kept: ProposedTodo[] = [];
+  for (const raw of candidates) {
+    const title = raw.title.trim();
+    const key = normKey(title);
+    if (!key) continue;
+    if (exact.has(key)) continue;
+    if (openTitles.some((t) => titlesOverlap(t, title))) continue;
+    const idx = kept.findIndex((k) => titlesOverlap(k.title, title));
+    if (idx < 0) {
+      kept.push({ ...raw, title });
+      continue;
+    }
+    if (normKey(title).length > normKey(kept[idx].title).length) {
+      kept[idx] = { ...kept[idx], ...raw, title };
+    }
+  }
+  return kept;
 }

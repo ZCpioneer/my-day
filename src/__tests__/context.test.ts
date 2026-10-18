@@ -16,21 +16,31 @@ const base = {
 
 const yesterday: DailyLog = {
   date: "2026-09-05",
-  plan: "买显示器",
-  done: ["买显示器"],
-  undone: ["给房东转水电费"],
-  state: "还行",
+  state: "显示器买好了，水电费还拖着",
   updatedAt: "2026-09-05T13:00:00.000Z",
 };
 
 describe("buildContextMessages", () => {
+  it("普通阶段：没有上一轮引导问", () => {
+    const facts = buildContextMessages({ ...base, messages: [] })[0]?.content ?? "";
+    expect(facts).toContain("阶段：普通。一摊事刚冒头只问一句，禁止提议。");
+  });
+
+  it("上一轮秘书是引导问：阶段为在回答上一问", () => {
+    const messages: ChatMessage[] = [
+      { id: "u1", role: "user", content: "我要做一个AI视频", createdAt: "", mode: "chat" },
+      { id: "a1", role: "assistant", content: "这摊事要拆成哪几步？", createdAt: "", mode: "chat" },
+    ];
+    const facts = buildContextMessages({ ...base, messages })[0]?.content ?? "";
+    expect(facts).toContain("阶段：用户在回答你上一问。谈清了才能提议。");
+  });
+
   it("includes yesterday's diary as a fact when provided", () => {
     const msgs = buildContextMessages({ ...base, yesterdayLog: yesterday });
     const facts = msgs[0]?.content ?? "";
     expect(msgs[0]?.role).toBe("system");
     expect(facts).toContain("昨天的日记");
-    expect(facts).toContain("买显示器");
-    expect(facts).toContain("给房东转水电费");
+    expect(facts).toContain("显示器买好了，水电费还拖着");
   });
 
   it("omits the diary line when there is no log", () => {

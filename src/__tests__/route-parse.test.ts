@@ -58,7 +58,7 @@ describe("routeParseResult", () => {
     expect(out.proposedTasks).toEqual([]);
   });
 
-  it("tasks 不落库，去重后返回待确认", async () => {
+  it("tasks 去重后一律进待确认，确认前不落库", async () => {
     const existing: Todo[] = [
       { id: "t1", title: "给妈妈回电话", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z" },
     ];
@@ -71,7 +71,7 @@ describe("routeParseResult", () => {
         { title: " 给 妈妈 回电话 " },
       ],
     };
-    const out = await routeParseResult(r, OPTS, deps);
+    const out = await routeParseResult(r, { ...OPTS, mentionTexts: ["明天下午三点前交稿，接私活"] }, deps);
     expect(events).toEqual([]);
     expect(out.proposedTasks).toEqual([
       { title: "明天下午三点前交稿", reason: undefined, when: "later", priority: "high", due: "2026-09-07", project: "接私活" },
@@ -84,10 +84,29 @@ describe("routeParseResult", () => {
       ...emptyParseResult(),
       tasks: [{ title: "去银行办房贷", reason: "利率要重签", estimate: 90, project: "搬家" }],
     };
-    const out = await routeParseResult(r, OPTS, deps);
+    const out = await routeParseResult(r, { ...OPTS, mentionTexts: ["去银行办房贷，搬家"] }, deps);
     expect(out.proposedTasks).toEqual([
       { title: "去银行办房贷", reason: "利率要重签", when: "later", priority: undefined, due: undefined, estimate: 90, project: "搬家" },
     ] satisfies ProposedTodo[]);
+  });
+
+  it("高置信度也不静默落库，和高、低一起进待确认", async () => {
+    const existing: Todo[] = [
+      { id: "t1", title: "记得带伞", status: "open", sourceDate: "2026-09-06", createdAt: "2026-09-06T01:00:00.000Z" },
+    ];
+    const { deps } = makeDeps({ listTodos: async () => existing });
+    const r = {
+      ...emptyParseResult(),
+      tasks: [
+        { title: "明早买牛奶", confidence: "high" as const, priority: "high" as const, due: "2026-09-08" },
+        { title: "记得带伞", confidence: "high" as const },
+        { title: "可能得洗车", confidence: "low" as const },
+        { title: "明早买牛奶", confidence: "low" as const },
+      ],
+    };
+    const out = await routeParseResult(r, OPTS, deps);
+    expect(out.proposedTasks.map((t) => t.title)).toEqual(["明早买牛奶", "可能得洗车"]);
+    expect(out.proposedTasks[0]).toMatchObject({ when: "later", priority: "high", due: "2026-09-08" });
   });
 
   it("waitingsResolved 按文本匹配解决等待", async () => {
@@ -104,5 +123,17 @@ describe("routeParseResult", () => {
     const r = { ...emptyParseResult(), waitingsResolved: ["快递到了"] };
     await routeParseResult(r, OPTS, deps);
     expect(resolved).toEqual([]);
+  });
+
+  it("没在三句窗口里点名的 project 剥掉，条目留下", async () => {
+    const { deps } = makeDeps();
+    const r = {
+      ...emptyParseResult(),
+      tasks: [{ title: "买瓷砖", project: "装修" }],
+    };
+    const out = await routeParseResult(r, { ...OPTS, mentionTexts: ["买瓷砖"] }, deps);
+    expect(out.proposedTasks).toEqual([
+      { title: "买瓷砖", reason: undefined, when: "later", priority: undefined, due: undefined, estimate: undefined, project: undefined },
+    ]);
   });
 });

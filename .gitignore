@@ -8,3 +8,16 @@ android/local.properties
 .DS_Store
 tsconfig.app.tsbuildinfo
 src/debug/default-key.ts
+.superpowers/
+
+# 密钥与本地环境。不要把 Key 写进会被提交的文件。
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# 编辑器与测试覆盖率
+.idea/
+coverage/

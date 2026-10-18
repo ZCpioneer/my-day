@@ -15,6 +15,13 @@ export function shouldGreet(chat: DayChat): boolean {
   return (chat.archive?.length ?? 0) === 0;
 }
 
+/** 晚间主动开场：本地 18 点起、今天还没生成日记、当天对话完全空白（空白口径同 shouldGreet）。 */
+export function shouldEveningGreet(now: Date, chat: DayChat, hasLogToday: boolean): boolean {
+  if (now.getHours() < 18) return false;
+  if (hasLogToday) return false;
+  return shouldGreet(chat);
+}
+
 export function sessionTranscript(messages: DayChat["messages"]): string {
   if (messages.length === 0) return "（当前这段没有对话）";
   return messages.map((m) => `${m.role === "user" ? "我" : "秘书"}：${m.content}`).join("\n");

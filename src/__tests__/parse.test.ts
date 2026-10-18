@@ -66,6 +66,15 @@ describe("parseSystemPrompt", () => {
     expect(p).not.toContain("memories");
     expect(p).toContain("只输出一个 JSON 对象");
   });
+
+  it("一摊事刚冒头不抽 task，且不许把新事塞进现有项目", () => {
+    const p = parseSystemPrompt();
+    expect(p).toContain("刚冒头的一摊事不是 task");
+    expect(p).toContain("禁止因为主题沾边就把新事塞进现有项目");
+    expect(p).toContain("只有用户明确说了归属才填");
+    expect(p).toContain("不要编「第几条」");
+    expect(p).toContain("换个说法也别再抽");
+  });
 });
 
 describe("parseInput", () => {

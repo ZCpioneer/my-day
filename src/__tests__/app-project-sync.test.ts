@@ -6,7 +6,7 @@ import App from "@/App.vue";
 
 vi.mock("@/api/deepseek", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/deepseek")>();
-  return { ...actual, chatCompletions: vi.fn() };
+  return { ...actual, chatCompletions: vi.fn(), chatCompletionsStream: vi.fn() };
 });
 
 async function waitFor(check: () => boolean | Promise<boolean>) {
@@ -46,12 +46,12 @@ describe("组状态随勾选自动流转", () => {
     await w.get("[data-nav=todo]").trigger("click");
     await waitFor(() => w.text().includes("找房"));
 
-    await w.get("[data-todo=t1] .item").trigger("click");
+    await w.get("[data-todo=t1] .box").trigger("click");
     await waitFor(() => w.find("[data-todo=t1] .item").classes().includes("done"));
     let p = (await projectRepo.list()).find((x) => x.title === "搬家")!;
     expect(p.status).toBe("active");
 
-    await w.get("[data-todo=t2] .item").trigger("click");
+    await w.get("[data-todo=t2] .box").trigger("click");
     await waitFor(async () => {
       await flushPromises();
       return (await projectRepo.list()).find((x) => x.title === "搬家")?.status === "done";
@@ -59,7 +59,7 @@ describe("组状态随勾选自动流转", () => {
     p = (await projectRepo.list()).find((x) => x.title === "搬家")!;
     expect(p.status).toBe("done");
 
-    await w.get("[data-todo=t2] .item").trigger("click");
+    await w.get("[data-todo=t2] .box").trigger("click");
     await waitFor(async () => {
       await flushPromises();
       return (await projectRepo.list()).find((x) => x.title === "搬家")?.status === "active";

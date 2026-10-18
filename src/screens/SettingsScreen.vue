@@ -6,8 +6,8 @@
       </div>
       <label class="field">
         <span>DeepSeek API Key</span>
-        <input v-model="draft.apiKey" type="password" autocomplete="off" placeholder="留空则用内置调试 Key" />
-        <p class="hint">可以自己贴 Key。不填就用内置的调试 Key。</p>
+        <input v-model="draft.apiKey" type="password" autocomplete="off" placeholder="只保存在这台设备上" />
+        <p class="hint">填写你自己的 Key，只存在本机，不会进仓库。留空则用本地调试回退。</p>
       </label>
       <label class="field">
         <span>模型</span>
@@ -23,8 +23,8 @@
       </label>
       <label class="field">
         <span>语音 API Key</span>
-        <input v-model="draft.asrAppKey" type="password" autocomplete="off" placeholder="留空则用内置调试 Key" />
-        <p class="hint">识别和朗读共用（阿里云百炼）。可以自己贴 Key。不填就用内置的调试 Key。</p>
+        <input v-model="draft.asrAppKey" type="password" autocomplete="off" placeholder="只保存在这台设备上" />
+        <p class="hint">阿里云百炼，识别和朗读共用。只存在本机。留空则用本地调试回退；不用语音可以留空。</p>
       </label>
       <button class="btn-save" type="button" @click="onSave">保存</button>
       <DebugPanel />

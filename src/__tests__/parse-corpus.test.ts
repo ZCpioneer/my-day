@@ -29,4 +29,15 @@ describe("PARSE_CORPUS", () => {
       }
     }
   });
+
+  it("confidence 期望必须挂在 expect.tasks 已有的 task 上", () => {
+    for (const c of PARSE_CORPUS) {
+      for (const cf of c.expect.confidence ?? []) {
+        expect(
+          c.expect.tasks ?? [],
+          `语料「${c.input}」的 confidence 期望「${cf.task}」没有对应 tasks 断言`,
+        ).toContain(cf.task);
+      }
+    }
+  });
 });

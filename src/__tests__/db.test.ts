@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { chatRepo, deleteDb, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo } from "@/storage/db";
-import type { ChatMessage, Todo, DailyLog } from "@/types";
+import { chatRepo, deleteDb, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo, weeklyRepo } from "@/storage/db";
+import type { ChatMessage, Todo, DailyLog, WeeklyLog } from "@/types";
 
 beforeEach(async () => {
   await deleteDb();
@@ -175,15 +175,30 @@ describe("todoRepo", () => {
     await todoRepo.move("nope", "today", 0);
     expect(await todoRepo.list()).toEqual([]);
   });
+
+  it("update 改标题和截止，null 清掉可选字段", async () => {
+    await todoRepo.add({
+      id: "t1",
+      title: "旧名",
+      status: "open",
+      sourceDate: "2026-09-05",
+      createdAt: "2026-09-05T01:00:00.000Z",
+      when: "later",
+      due: "2026-09-08",
+      priority: "high",
+    });
+    await todoRepo.update("t1", { title: "新名", when: "today", due: null, priority: null });
+    const row = (await todoRepo.list()).find((t) => t.id === "t1");
+    expect(row).toMatchObject({ title: "新名", when: "today" });
+    expect(row?.due).toBeUndefined();
+    expect(row?.priority).toBeUndefined();
+  });
 });
 
 describe("logRepo", () => {
   it("overwrites the same date", async () => {
     const first: DailyLog = {
       date: "2026-09-05",
-      plan: "先调试",
-      done: [],
-      undone: ["周报"],
       state: "烦",
       updatedAt: "2026-09-05T12:00:00.000Z",
     };
@@ -197,9 +212,6 @@ describe("logRepo", () => {
     expect(await logRepo.list()).toEqual([]);
     const mk = (date: string): DailyLog => ({
       date,
-      plan: "早计划",
-      done: [],
-      undone: [],
       state: "还行",
       updatedAt: `${date}T12:00:00.000Z`,
     });
@@ -230,6 +242,12 @@ describe("projectRepo", () => {
     expect(all[0].note).toBe("解析层联调完了");
     expect(again.id).toBe(all[0].id);
     expect(all[0].status).toBe("active");
+  });
+
+  it("remove 删掉组", async () => {
+    const p = await projectRepo.upsertByTitle("搬家", {});
+    await projectRepo.remove(p.id);
+    expect(await projectRepo.list()).toEqual([]);
   });
 });
 
@@ -279,5 +297,84 @@ describe("projectRepo.put / move", () => {
     const list = await projectRepo.list();
     expect(list.find((p) => p.id === b.id)?.order).toBe(0);
     expect(list.find((p) => p.id === a.id)?.order).toBe(1);
+  });
+});
+
+function mkWeekly(week: string, done: string): WeeklyLog {
+  return {
+    week,
+    from: "2026-09-07",
+    to: "2026-09-13",
+    done,
+    undone: "剩一点",
+    next: "下周继续",
+    updatedAt: "2026-09-13T12:00:00.000Z",
+  };
+}
+
+describe("weeklyRepo", () => {
+  it("put 后 get 拿到；同周键覆盖", async () => {
+    expect(await weeklyRepo.get("2026-W37")).toBeNull();
+    await weeklyRepo.put(mkWeekly("2026-W37", "第一版"));
+    expect((await weeklyRepo.get("2026-W37"))?.done).toBe("第一版");
+    await weeklyRepo.put(mkWeekly("2026-W37", "重生成"));
+    expect((await weeklyRepo.get("2026-W37"))?.done).toBe("重生成");
+  });
+
+  it("list 按周键倒序", async () => {
+    expect(await weeklyRepo.list()).toEqual([]);
+    await weeklyRepo.put(mkWeekly("2026-W35", "甲"));
+    await weeklyRepo.put(mkWeekly("2026-W37", "乙"));
+    await weeklyRepo.put(mkWeekly("2026-W36", "丙"));
+    expect((await weeklyRepo.list()).map((w) => w.week)).toEqual(["2026-W37", "2026-W36", "2026-W35"]);
+  });
+});
+
+describe("v1 → v2 迁移", () => {
+  it("老库升级后 v1 数据原样保留，weekly store 可用", async () => {
+    // 先以 v1 结构建库并写入数据（模拟升级前一直在用的老库）。
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open("ai-secretary", 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        db.createObjectStore("chats", { keyPath: "date" });
+        db.createObjectStore("todos", { keyPath: "id" });
+        db.createObjectStore("logs", { keyPath: "date" });
+        db.createObjectStore("events", { keyPath: "id" });
+        db.createObjectStore("projects", { keyPath: "id" });
+        db.createObjectStore("waitings", { keyPath: "id" });
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction(["logs", "todos"], "readwrite");
+        tx.objectStore("logs").put({
+          // 旧版日记还带 plan/done/undone 字段；新结构不再读它们，升级后要能正常取出。
+          date: "2026-09-01",
+          plan: "老日记",
+          done: ["旧事项"],
+          undone: [],
+          state: "还行",
+          updatedAt: "2026-09-01T12:00:00.000Z",
+        });
+        tx.objectStore("todos").put({
+          id: "old-1",
+          title: "老待办",
+          status: "open",
+          sourceDate: "2026-09-01",
+          createdAt: "2026-09-01T01:00:00.000Z",
+        });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    });
+    // repo 以 v2 打开，触发 onupgradeneeded（oldVersion=1，只补 weekly store）。
+    expect((await logRepo.get("2026-09-01"))?.state).toBe("还行");
+    expect((await todoRepo.list()).map((t) => t.title)).toEqual(["老待办"]);
+    await weeklyRepo.put(mkWeekly("2026-W36", "升级后能用"));
+    expect((await weeklyRepo.get("2026-W36"))?.done).toBe("升级后能用");
   });
 });

@@ -1,4 +1,4 @@
-import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { CapacitorHttp } from "@capacitor/core";
 import type { PostJson } from "./deepseek";
 
 export const browserPostJson: PostJson = async (url, headers, body) => {
@@ -15,6 +15,8 @@ export const browserPostJson: PostJson = async (url, headers, body) => {
   }
 };
 
+// 兜底实现，保留导出但不再默认使用：DeepSeek 已支持 CORS，原生端同样走 fetch；
+// 且 CapacitorHttp 的 fetch patch 会把响应缓冲完才返回，会破坏流式（见 capacitor.config.ts）。
 export const nativePostJson: PostJson = async (url, headers, body) => {
   try {
     const res = await CapacitorHttp.request({
@@ -32,5 +34,6 @@ export const nativePostJson: PostJson = async (url, headers, body) => {
 };
 
 export function activePostJson(): PostJson {
-  return Capacitor.isNativePlatform() ? nativePostJson : browserPostJson;
+  // 全平台统一走 fetch：DeepSeek 已全量放开 CORS，不再需要原生端绕路。
+  return browserPostJson;
 }

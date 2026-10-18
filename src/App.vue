@@ -35,7 +35,14 @@
       <TodoScreen
         v-else-if="tab === 'todo'"
         :todos="todos"
+        :date="date"
         :projects="projects"
+        :waitings="waitings"
+        :pending-propose="pendingPropose"
+        :propose-kind="proposeKind"
+        :existing-projects="projects.map((p) => p.title)"
+        :undo-title="undoTitle"
+        :awaiting="awaiting"
         @toggle="onToggle"
         @remove="onRemove"
         @move="onMove"
@@ -44,6 +51,14 @@
         @rename-group="onRenameGroup"
         @complete-group="onCompleteGroup"
         @create-group="onCreateGroup"
+        @delete-group="onDeleteGroup"
+        @add="onAddTodo"
+        @update="onUpdateTodo"
+        @tidy="onTidy"
+        @confirm="onConfirmPropose"
+        @skip="onSkipPropose"
+        @resolve-waiting="onResolveWaiting"
+        @undo-remove="onUndoRemove"
       />
       <DiaryScreen
         v-else-if="tab === 'diary'"
@@ -92,6 +107,7 @@ import { composeDailyLog } from "@/agent/compose-log";
 import { composePlan } from "@/agent/compose-plan";
 import { composeWeeklyLog } from "@/agent/compose-week";
 import { runAgent, type AgentDeps } from "@/agent/loop";
+import { attributionTexts, isClarifyQuestion, replyStillAsking } from "@/agent/clarify";
 import { parseInput } from "@/agent/parse";
 import { routeParseResult, type RouteDeps } from "@/agent/route-parse";
 import { EVENING_KICKOFF_TEXT, KICKOFF_TEXT } from "@/agent/prompt";
@@ -107,11 +123,12 @@ import SettingsScreen from "@/screens/SettingsScreen.vue";
 import { shouldEveningGreet, shouldGreet } from "@/chat-session";
 import { catchUpDiary } from "@/diary";
 import { dayLabel, localDate, shiftLocalDate, weekKey } from "@/dates";
-import { debugLog } from "@/debug/log";
+import { debugLog, logDrops } from "@/debug/log";
 import { newId } from "@/ids";
 import { normKey } from "@/norm";
+import { withoutCoveredTitles } from "@/todos-filter";
 import { rescheduleReminders } from "@/notify";
-import { createNotifier } from "@/notify-capacitor";
+import { createNotifier, listenNotificationOpen } from "@/notify-capacitor";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR, ritualForNow } from "@/ritual";
 import { chatRepo, eventRepo, logRepo, projectRepo, todoRepo, waitingRepo, weeklyRepo } from "@/storage/db";
 import { effectiveApiKey, effectiveAsrKey, loadSettings, saveSettings } from "@/storage/settings";
@@ -127,6 +144,7 @@ import {
   type ProposedTodo,
   type Settings,
   type Todo,
+  type TodoDraft,
   type Waiting,
   type WeeklyLog,
 } from "@/types";
@@ -165,6 +183,10 @@ let catchUpRunning = false;
 let dayTick: number | undefined;
 let closedThisTurn = false;
 let lastProposeSkipped = false;
+const undoTitle = ref<string | null>(null);
+let lastRemoved: Todo | null = null;
+let undoTimer: ReturnType<typeof setTimeout> | null = null;
+let stopNotifyListen: (() => void) | undefined;
 
 const dateLabel = computed(() => dayLabel(date.value));
 
@@ -333,13 +355,12 @@ let proposeTail: Promise<void> = Promise.resolve();
 
 function onPropose(items: ProposedTodo[], kind: "later" | "today"): Promise<ProposedTodo[]> {
   const run = proposeTail.then(async () => {
-    // 记重型过滤（只对「新记入」生效；今日计划确认框里的条目本来就在清单里，不能滤）：
-    // 解析侧和回复循环可能先后对同一件事弹确认框——按 normKey 滤掉已记过的，
-    // 滤完没有新东西就不弹框，直接返回空数组。
+    // 记重型过滤（只对「新记入」生效；今日计划确认框里的条目本来就在清单里，不能整表滤掉）：
+    // 全字相同，或未完成标题一方包含另一方，都不再弹。滤完没有新东西就不弹框。
     let fresh = items;
     if (kind === "later") {
-      const existing = new Set(todos.value.map((t) => normKey(t.title)));
-      fresh = items.filter((i) => !existing.has(normKey(i.title)));
+      fresh = withoutCoveredTitles(items, todos.value);
+      logDrops("later", items.map((i) => i.title), fresh.map((i) => i.title));
       if (fresh.length === 0) return [];
     }
     return new Promise<ProposedTodo[]>((resolve) => {
@@ -371,7 +392,16 @@ async function applyAcceptedPlan(items: ProposedTodo[]) {
   for (const i of items.filter((x) => x.when !== "later")) today.push(await toEntry(i));
   const later: { title: string; projectId?: string }[] = [];
   for (const i of items.filter((x) => x.when === "later")) later.push(await toEntry(i));
+  const before = todos.value.map((t) => ({ id: t.id, title: t.title }));
   await todoRepo.applyFullPlan({ today, later });
+  const after = await todoRepo.list();
+  const notes: string[] = [];
+  for (const t of after) {
+    const prev = before.find((b) => b.id === t.id);
+    if (!prev) notes.push(`新增 ${t.title}`);
+    else if (prev.title !== t.title) notes.push(`${prev.title} → ${t.title}`);
+  }
+  debugLog.push({ event: "todo_confirmed", tool: "tidy", detail: notes.join("；") || "无标题变化" });
   await chatRepo.closeSession(date.value, new Date().toISOString());
   chat.value = await chatRepo.get(date.value);
   todos.value = await todoRepo.list();
@@ -415,7 +445,12 @@ async function appendMessage(msg: ChatMessage) {
 // 解析侧整条链路：解析 → 更新 lastParseResult → 分流落库 → 任务一律弹确认框。
 // runTurn 把它挂起不 await（finally 才等它收尾），与回复循环并行；自带兜底 catch——
 // parseInput 本身不抛异常，这里防的是分流/落库/确认出错：只记 parse_fail，绝不影响对话。
-async function runParseSide(userText: string, messageId: string, history: ChatMessage[]) {
+async function runParseSide(
+  userText: string,
+  messageId: string,
+  history: ChatMessage[],
+  agentDone: Promise<{ text: string; executedPropose: boolean }>,
+) {
   try {
     const parseResult = await parseInput({
       text: userText,
@@ -431,16 +466,35 @@ async function runParseSide(userText: string, messageId: string, history: ChatMe
       complete,
     });
     lastParseResult.value = parseResult;
-    const routed = await routeParseResult(parseResult, { date: date.value, messageId }, routeDeps);
+    const rawTitles = parseResult.tasks.map((t) => t.title);
+    debugLog.push({
+      event: "parse_ok",
+      tool: "parse",
+      detail: `tasks=${rawTitles.length}${rawTitles.length ? " " + rawTitles.join("、") : ""} events=${parseResult.events.length} decisions=${parseResult.decisions.length} waitings=${parseResult.waitings.length}`,
+    });
+    const routed = await routeParseResult(
+      parseResult,
+      { date: date.value, messageId, mentionTexts: attributionTexts(userText, history) },
+      routeDeps,
+    );
     await refreshState();
-    if (routed.proposedTasks.length > 0) {
-      const accepted = await onPropose(routed.proposedTasks, "later");
-      if (accepted.length > 0) {
-        await addTodos(accepted);
-        debugLog.push({ event: "todo_confirmed", tool: "parse", detail: accepted.map((a) => a.title).join("、") });
-      } else {
-        debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
-      }
+    const proposedTitles = routed.proposedTasks.map((t) => t.title);
+    logDrops("parse", rawTitles, proposedTitles);
+    if (routed.proposedTasks.length === 0) return;
+    const { text, executedPropose } = await agentDone;
+    // 本轮还在问、且回复没提议：解析框不抢话。问号和「对吧 / 说清 / 要不要记」比引导问词表宽。
+    if (!executedPropose && (isClarifyQuestion(text) || replyStillAsking(text))) {
+      const why = isClarifyQuestion(text) ? "引导问" : "还在问";
+      debugLog.push({ event: "todo_rejected", tool: "parse", detail: `${why}，不弹：${proposedTitles.join("、")}` });
+      return;
+    }
+    debugLog.push({ event: "propose_ui", tool: "parse", detail: proposedTitles.join("、") });
+    const accepted = await onPropose(routed.proposedTasks, "later");
+    if (accepted.length > 0) {
+      await addTodos(accepted);
+      debugLog.push({ event: "todo_confirmed", tool: "parse", detail: accepted.map((a) => a.title).join("、") });
+    } else {
+      debugLog.push({ event: "todo_rejected", tool: "parse", detail: "用户这次不加" });
     }
   } catch (e) {
     debugLog.push({ event: "parse_fail", detail: e instanceof Error ? e.message : String(e) });
@@ -457,6 +511,10 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
   const history = chat.value.messages;
   // 解析侧与回复侧并行：两边都落定本轮才算完（finally 里等 parseDone）。
   let parseDone: Promise<void> = Promise.resolve();
+  const agentGate = { resolve: (_v: { text: string; executedPropose: boolean }) => {} };
+  const agentDone = new Promise<{ text: string; executedPropose: boolean }>((resolve) => {
+    agentGate.resolve = resolve;
+  });
   try {
     let userMsg: ChatMessage | null = null;
     if (!opts?.silent) {
@@ -471,10 +529,11 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
     }
     if (userMsg) {
       // 挂起不 await：解析一启动，回复循环立刻开始。silent 轮不触发解析（维持原样）。
-      parseDone = runParseSide(userText, userMsg.id, history);
+      // 解析框等回复结束后再决定弹不弹。
+      parseDone = runParseSide(userText, userMsg.id, history, agentDone);
     }
     const yesterdayLog = await logRepo.get(shiftLocalDate(date.value, -1));
-    const { assistantText } = await runAgent({
+    const { assistantText, executedPropose } = await runAgent({
       deps: agentDeps,
       mode,
       userText,
@@ -491,6 +550,7 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
         streamingReply.value = text;
       },
     });
+    agentGate.resolve({ text: assistantText, executedPropose });
     // 流式气泡使命到此：先撤掉再落最终消息，避免两个气泡同框
     streamingReply.value = null;
     if (closedThisTurn) return;
@@ -502,6 +562,7 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       mode,
     });
   } catch (e) {
+    agentGate.resolve({ text: "", executedPropose: false });
     streamingReply.value = null;
     if (closedThisTurn) return;
     const userMessage = e instanceof ApiError ? e.userMessage : "模型这轮没回上，再说一次";
@@ -516,6 +577,7 @@ async function runTurn(mode: ChatMode, userText: string, opts?: { silent?: boole
       mode,
     });
   } finally {
+    agentGate.resolve({ text: "", executedPropose: false });
     // 两边都结束本轮才算完：解析侧可能还停在确认框上等用户，等它落定再解锁输入
     await parseDone;
     awaiting.value = false;
@@ -538,8 +600,16 @@ async function onTidy() {
       complete,
       model: settings.value.model,
     });
+    debugLog.push({
+      event: "propose_ui",
+      tool: "tidy",
+      detail: `今天：${plan.today.map((i) => i.title).join("、") || "无"}；以后：${plan.later.map((i) => i.title).join("、") || "无"}`,
+    });
     const accepted = await onPropose([...plan.today, ...plan.later], "today");
-    if (lastProposeSkipped) return;
+    if (lastProposeSkipped) {
+      debugLog.push({ event: "todo_rejected", tool: "tidy", detail: "用户先不定" });
+      return;
+    }
     await applyAcceptedPlan(accepted);
   } catch (e) {
     const userMessage = e instanceof ApiError ? e.userMessage : "待办这轮没整理成";
@@ -687,6 +757,9 @@ function onVisibilityChange() {
 
 onMounted(() => {
   document.addEventListener("visibilitychange", onVisibilityChange);
+  stopNotifyListen = listenNotificationOpen(() => {
+    tab.value = "todo";
+  });
   dayTick = window.setInterval(() => {
     void (async () => {
       const rolled = await rollToTodayIfNeeded();
@@ -699,7 +772,9 @@ onMounted(() => {
 });
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  stopNotifyListen?.();
   if (dayTick !== undefined) window.clearInterval(dayTick);
+  if (undoTimer !== null) clearTimeout(undoTimer);
 });
 
 function onSend(text: string) {
@@ -715,8 +790,33 @@ async function onToggle(id: string) {
 
 async function onRemove(id: string) {
   await ready;
+  const hit = todos.value.find((t) => t.id === id) ?? null;
   await todoRepo.remove(id);
   todos.value = await todoRepo.list();
+  await syncProjects();
+  lastRemoved = hit;
+  undoTitle.value = hit?.title ?? null;
+  if (undoTimer !== null) clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => {
+    undoTitle.value = null;
+    lastRemoved = null;
+    undoTimer = null;
+  }, 5000);
+}
+
+async function onUndoRemove() {
+  await ready;
+  if (!lastRemoved) return;
+  const restore = lastRemoved;
+  lastRemoved = null;
+  undoTitle.value = null;
+  if (undoTimer !== null) {
+    clearTimeout(undoTimer);
+    undoTimer = null;
+  }
+  await todoRepo.add(restore);
+  todos.value = await todoRepo.list();
+  await refreshState();
   await syncProjects();
 }
 
@@ -766,6 +866,72 @@ async function onCompleteGroup(id: string, done: boolean) {
 async function onCreateGroup(title: string) {
   await ready;
   await projectRepo.upsertByTitle(title, {});
+  await refreshState();
+}
+
+async function onDeleteGroup(id: string) {
+  await ready;
+  const members = todos.value.filter((t) => t.projectId === id);
+  for (const t of members) await todoRepo.setProject(t.id, null);
+  await projectRepo.remove(id);
+  todos.value = await todoRepo.list();
+  await refreshState();
+  await syncProjects();
+}
+
+async function resolveDraftProject(draft: TodoDraft): Promise<string | undefined> {
+  if (draft.newTitle?.trim()) {
+    const created = await projectRepo.upsertByTitle(draft.newTitle.trim(), {});
+    return created.id;
+  }
+  return draft.projectId || undefined;
+}
+
+async function onAddTodo(draft: TodoDraft) {
+  await ready;
+  const trimmed = draft.title.trim();
+  if (!trimmed) return;
+  const dup = todos.value.some((t) => t.status === "open" && normKey(t.title) === normKey(trimmed));
+  if (dup) return;
+  const pid = await resolveDraftProject(draft);
+  await todoRepo.add({
+    id: newId(),
+    title: trimmed,
+    status: "open",
+    sourceDate: localDate(),
+    createdAt: new Date().toISOString(),
+    when: draft.when,
+    projectId: pid,
+    due: draft.due,
+    estimate: draft.estimate,
+    priority: draft.priority,
+    reason: draft.reason,
+  });
+  todos.value = await todoRepo.list();
+  await refreshState();
+  await syncProjects();
+}
+
+async function onUpdateTodo(id: string, draft: TodoDraft) {
+  await ready;
+  const pid = await resolveDraftProject(draft);
+  await todoRepo.update(id, {
+    title: draft.title,
+    when: draft.when,
+    projectId: pid ?? null,
+    due: draft.due ?? null,
+    estimate: draft.estimate ?? null,
+    priority: draft.priority ?? null,
+    reason: draft.reason ?? null,
+  });
+  todos.value = await todoRepo.list();
+  await refreshState();
+  await syncProjects();
+}
+
+async function onResolveWaiting(id: string) {
+  await ready;
+  await waitingRepo.resolve(id);
   await refreshState();
 }
 

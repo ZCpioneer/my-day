@@ -72,7 +72,7 @@ export interface Settings {
   model: string;
   /** 0–23，早晚分界小时：此小时之前算「早」，起算「晚」。 */
   daySplitHour: number;
-  /** 阿里云百炼 API Key（识别 qwen3-asr-flash + 朗读 qwen3-tts-flash）。空则用内置调试 Key。 */
+  /** 阿里云百炼 API Key（识别 qwen3-asr-flash + 朗读 qwen3-tts-flash）。空则用本地未提交的调试回退。 */
   asrAppKey?: string;
 }
 
@@ -87,6 +87,8 @@ export type DebugEvent =
   | "todo_rejected"
   | "agent_stop"
   | "parse_fail"
+  | "parse_ok"
+  | "dedupe"
   | "notify";
 
 export interface DebugEntry {
@@ -98,6 +100,18 @@ export interface DebugEntry {
   durationMs?: number;
   model?: string;
   tool?: string;
+}
+
+/** 待办页新增/编辑表单提交的草稿。 */
+export interface TodoDraft {
+  title: string;
+  when: "today" | "later";
+  projectId?: string | null;
+  newTitle?: string;
+  due?: string;
+  estimate?: number;
+  priority?: "high" | "normal";
+  reason?: string;
 }
 
 export interface ProposedTodo {

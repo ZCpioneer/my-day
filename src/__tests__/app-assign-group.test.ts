@@ -7,7 +7,7 @@ import App from "@/App.vue";
 
 vi.mock("@/api/deepseek", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/deepseek")>();
-  return { ...actual, chatCompletions: vi.fn() };
+  return { ...actual, chatCompletions: vi.fn(), chatCompletionsStream: vi.fn() };
 });
 
 async function waitFor(check: () => boolean) {

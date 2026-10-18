@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import TodoScreen from "@/screens/TodoScreen.vue";
@@ -41,15 +43,18 @@ beforeEach(async () => {
 });
 
 describe("TodoScreen", () => {
-  it("toggles a row into 已经勾掉", async () => {
+  it("只有点勾选框才勾掉，点标题/正文不勾", async () => {
     const w = mount(TodoScreen, {
       props: {
         todos: await todoRepo.list(),
       },
     });
     expect(w.text()).toContain("给房东转水电费");
+    // 点标题/正文区域：不勾
     await w.get("[data-todo=t1] .item").trigger("click");
-    // parent handles toggle in App; for unit test, TodoScreen emits toggle
+    expect(w.emitted("toggle")).toBeUndefined();
+    // 点左侧勾选框：才 emit toggle（parent handles toggle in App; for unit test, TodoScreen emits toggle）
+    await w.get("[data-todo=t1] .box").trigger("click");
     expect(w.emitted("toggle")?.[0]).toEqual(["t1"]);
   });
 
@@ -63,13 +68,18 @@ describe("TodoScreen", () => {
     expect(w.text()).toContain("以后");
     expect(w.text()).toContain("已完成");
     expect(w.text()).toContain("周报");
-    expect(w.text()).toContain("左滑删除 · 长按拖动");
+    expect(w.text()).toContain("点开可改 · 左滑移动/分组/删除 · 长按拖动");
   });
 
   it("emits remove from the revealed delete button, not from a normal tap", async () => {
     const w = mount(TodoScreen, { props: { todos: await todoRepo.list() } });
     const row = w.get("[data-todo=t2]");
+    // 普通点按文本：既不勾也不删
     await row.get(".item").trigger("click");
+    expect(w.emitted("toggle")).toBeUndefined();
+    expect(w.emitted("remove")).toBeUndefined();
+    // 点勾选框：勾，不删
+    await row.get(".box").trigger("click");
     expect(w.emitted("toggle")?.[0]).toEqual(["t2"]);
     expect(w.emitted("remove")).toBeUndefined();
 
@@ -389,5 +399,166 @@ describe("TodoScreen 手动改组", () => {
     await w.get("[data-group=p1] [data-group-menu]").trigger("click");
     expect(w.find(".sheet").exists()).toBe(true);
     expect(w.text()).toContain("还有 1 件没做完");
+  });
+});
+
+describe("TodoScreen 手动新增", () => {
+  it("显示加号悬浮按钮", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    expect(w.find("[data-todo-add]").exists()).toBe(true);
+  });
+
+  it("点加号打开新增浮层", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    expect(w.find("[data-add-sheet]").exists()).toBe(true);
+    expect(w.get("[data-add-sheet]").text()).toContain("新增待办");
+  });
+
+  it("空标题不能提交", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    expect(w.get("[data-add-confirm]").attributes("disabled")).toBeDefined();
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")).toBeUndefined();
+  });
+
+  it("填标题后确认 emit add，默认今天", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("买牛奶");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]).toEqual([{ title: "买牛奶", when: "today", projectId: null }]);
+    expect(w.find("[data-add-sheet]").exists()).toBe(false);
+  });
+
+  it("选今天后确认 emit when today", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("交房租");
+    await w.get("[data-add-when=today]").trigger("click");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]).toEqual([{ title: "交房租", when: "today", projectId: null }]);
+  });
+
+  it("点取消关闭浮层不 emit", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("买牛奶");
+    await w.get("[data-add-cancel]").trigger("click");
+    expect(w.find("[data-add-sheet]").exists()).toBe(false);
+    expect(w.emitted("add")).toBeUndefined();
+  });
+
+  it("标题两端空白会去掉", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("  买牛奶  ");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]).toEqual([{ title: "买牛奶", when: "today", projectId: null }]);
+  });
+
+  it("键盘顶起时浮层坐在 --kb 上面", () => {
+    const css = readFileSync(resolve("src/styles.css"), "utf8");
+    expect(css).toMatch(/\.sheet-mask\s*\{[^}]*bottom:\s*var\(--kb/);
+  });
+
+  it("新增浮层能选已有组，确认 emit 带 projectId", async () => {
+    const projects: Project[] = [
+      { id: "p1", title: "搬家", status: "active", createdAt: "2026-09-06T01:00:00.000Z", updatedAt: "2026-09-06T01:00:00.000Z" },
+      { id: "p2", title: "发布会", status: "done", createdAt: "2026-09-05T01:00:00.000Z", updatedAt: "2026-09-05T02:00:00.000Z" },
+    ];
+    const w = mount(TodoScreen, { props: { todos: [], projects } });
+    await w.get("[data-todo-add]").trigger("click");
+    const opts = w.get("[data-add-group]").findAll("option").map((o) => o.text());
+    expect(opts).toContain("不分组");
+    expect(opts).toContain("搬家");
+    expect(opts).toContain("＋ 新组…");
+    expect(opts).not.toContain("发布会");
+    await w.get("[data-add-title]").setValue("找房");
+    await w.get("[data-add-group]").setValue("p1");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]).toEqual([{ title: "找房", when: "today", projectId: "p1" }]);
+  });
+
+  it("选新组并填名后 emit 新组名", async () => {
+    const w = mount(TodoScreen, { props: { todos: [], projects: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("打包");
+    await w.get("[data-add-group]").setValue("__new__");
+    await w.get("[data-add-group-new]").setValue("搬家");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]).toEqual([{ title: "打包", when: "today", projectId: null, newTitle: "搬家" }]);
+  });
+
+  it("可填截止和急", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-add]").trigger("click");
+    await w.get("[data-add-title]").setValue("交稿");
+    await w.get("[data-add-due]").setValue("2026-09-20");
+    const hot = w.get("[data-add-priority]").element as HTMLInputElement;
+    hot.checked = true;
+    await w.get("[data-add-priority]").trigger("change");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("add")?.[0]?.[0]).toMatchObject({
+      title: "交稿",
+      when: "today",
+      due: "2026-09-20",
+      priority: "high",
+    });
+  });
+});
+
+describe("TodoScreen 编辑 / 逾期 / 等待 / 整理", () => {
+  it("点标题打开编辑浮层，保存 emit update", async () => {
+    const todos: Todo[] = [
+      { id: "t1", title: "旧名", status: "open", sourceDate: "2026-09-14", createdAt: "2026-09-14T01:00:00.000Z", when: "today" },
+    ];
+    const w = mount(TodoScreen, { props: { todos } });
+    await w.get("[data-todo-title]").trigger("click");
+    expect(w.get("[data-add-sheet]").text()).toContain("改待办");
+    await w.get("[data-add-title]").setValue("新名");
+    await w.get("[data-add-confirm]").trigger("click");
+    expect(w.emitted("update")?.[0]?.[0]).toBe("t1");
+    expect(w.emitted("update")?.[0]?.[1]).toMatchObject({ title: "新名", when: "today" });
+  });
+
+  it("逾期的以后事项出现在今天的逾期区，不在以后分区", async () => {
+    const todos: Todo[] = [
+      { id: "late", title: "过期稿", status: "open", sourceDate: "2026-09-01", createdAt: "2026-09-01T01:00:00.000Z", when: "later", due: "2020-01-01" },
+      { id: "ok", title: "以后再说", status: "open", sourceDate: "2026-09-14", createdAt: "2026-09-14T01:00:00.000Z", when: "later" },
+    ];
+    const w = mount(TodoScreen, { props: { todos } });
+    expect(w.get("[data-bucket=today]").text()).toContain("过期稿");
+    expect(w.get("[data-bucket=today]").text()).toContain("逾期");
+    expect(w.get("[data-bucket=later]").text()).not.toContain("过期稿");
+    expect(w.get("[data-bucket=later]").text()).toContain("以后再说");
+  });
+
+  it("等待事项可点等到了", async () => {
+    const w = mount(TodoScreen, {
+      props: {
+        todos: [],
+        waitings: [{ id: "w1", text: "等房东答复", waitingOn: "房东", since: "2026-09-06T01:00:00.000Z", fromMessageId: "m1" }],
+      },
+    });
+    expect(w.get("[data-bucket=waiting]").text()).toContain("等房东答复");
+    await w.get("[data-waiting-done]").trigger("click");
+    expect(w.emitted("resolveWaiting")?.[0]).toEqual(["w1"]);
+  });
+
+  it("整理按钮 emit tidy；空态能打开今天新增", async () => {
+    const w = mount(TodoScreen, { props: { todos: [] } });
+    await w.get("[data-todo-tidy]").trigger("click");
+    expect(w.emitted("tidy")).toHaveLength(1);
+    await w.get("[data-empty-add-today]").trigger("click");
+    expect(w.find("[data-add-sheet]").exists()).toBe(true);
+  });
+
+  it("撤销条在有 undoTitle 时出现", async () => {
+    const w = mount(TodoScreen, { props: { todos: [], undoTitle: "周报" } });
+    expect(w.get("[data-todo-undo]").text()).toContain("周报");
+    await w.get("[data-todo-undo-btn]").trigger("click");
+    expect(w.emitted("undoRemove")).toHaveLength(1);
   });
 });

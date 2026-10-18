@@ -1,20 +1,14 @@
+import { prepareLaterProposals } from "./clarify";
 import { normKey } from "@/norm";
-import type {
-  ParseResult,
-  Project,
-  ProposedTodo,
-  TimelineEvent,
-  Todo,
-  Waiting,
-} from "@/types";
+import type { ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
 
 export interface RouteDeps {
   addEvent: (e: TimelineEvent) => Promise<void>;
   upsertProject: (title: string, patch: { note?: string; status?: Project["status"] }) => Promise<void>;
   addWaiting: (w: Waiting) => Promise<void>;
   listOpenWaitings: () => Promise<Waiting[]>;
-  resolveWaiting: (id: string) => Promise<void>;
   listTodos: () => Promise<Todo[]>;
+  resolveWaiting: (id: string) => Promise<void>;
   now: () => Date;
   newId: () => string;
 }
@@ -24,10 +18,10 @@ export interface RouteOutcome {
   proposedTasks: ProposedTodo[];
 }
 
-/** 解析产出的路由：事实自动落 Timeline/State；任务只返回候选，等用户确认。 */
+/** 解析产出的路由：事实自动落 Timeline/State；任务一律进确认框，不静默落库。 */
 export async function routeParseResult(
   result: ParseResult,
-  opts: { date: string; messageId: string },
+  opts: { date: string; messageId: string; mentionTexts?: string[] },
   deps: RouteDeps,
 ): Promise<RouteOutcome> {
   const createdAt = deps.now().toISOString();
@@ -57,12 +51,12 @@ export async function routeParseResult(
 
   const todos = await deps.listTodos();
   const seenTodos = new Set(todos.map((t) => normKey(t.title)));
-  const proposedTasks: ProposedTodo[] = [];
+  const raw: ProposedTodo[] = [];
   for (const t of result.tasks) {
     const key = normKey(t.title);
     if (!key || seenTodos.has(key)) continue;
     seenTodos.add(key);
-    proposedTasks.push({
+    raw.push({
       title: t.title,
       reason: t.reason,
       when: "later",
@@ -73,5 +67,5 @@ export async function routeParseResult(
     });
   }
 
-  return { proposedTasks };
+  return { proposedTasks: prepareLaterProposals(raw, opts.mentionTexts ?? []) };
 }

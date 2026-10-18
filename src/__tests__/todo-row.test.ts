@@ -17,6 +17,28 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("TodoRow 勾选", () => {
+  it("点勾选框 emit toggle，点标题 emit edit", async () => {
+    const w = mount(TodoRow, { props: { todo: openToday } });
+    await w.get("[data-todo-title]").trigger("click");
+    expect(w.emitted("toggle")).toBeUndefined();
+    expect(w.emitted("edit")?.[0]).toEqual(["t1"]);
+    await w.get(".box").trigger("click");
+    expect(w.emitted("toggle")?.[0]).toEqual(["t1"]);
+  });
+});
+
+describe("TodoRow 左滑移动", () => {
+  it("滑开后点移动 emit shift", async () => {
+    const w = mount(TodoRow, { props: { todo: openToday } });
+    await w.get(".item").trigger("pointerdown", { clientX: 200, clientY: 20, pointerId: 1 });
+    await w.get(".item").trigger("pointermove", { clientX: 110, clientY: 20, pointerId: 1 });
+    await w.get(".item").trigger("pointerup", { clientX: 110, clientY: 20, pointerId: 1 });
+    await w.get("[data-todo-shift]").trigger("click");
+    expect(w.emitted("shift")?.[0]).toEqual(["t1"]);
+  });
+});
+
 describe("TodoRow hold", () => {
   it("emits lift after holding still, and the following click does not toggle", async () => {
     vi.useFakeTimers();
@@ -101,6 +123,11 @@ describe("TodoRow 徽标", () => {
   it("没有扩展字段时不渲染徽标行", () => {
     const w = mount(TodoRow, { props: { todo: openToday } });
     expect(w.find(".todo-meta").exists()).toBe(false);
+  });
+
+  it("留下徽标独立于徽标行", () => {
+    const w = mount(TodoRow, { props: { todo: openToday, leftover: true } });
+    expect(w.get(".todo-flag").text()).toBe("留下");
   });
 
   it("展示 reason 与耗时，逾期徽标标红", () => {

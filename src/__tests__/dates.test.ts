@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayNumLabel, localDate, monthLabel, shiftLocalDate, weekDates, weekdayLabel, weekKey } from "@/dates";
+import { dayLabel, dayNumLabel, localDate, monthLabel, shiftLocalDate, weekDates, weekdayLabel, weekKey } from "@/dates";
 
 describe("localDate", () => {
   it("formats the local calendar day", () => {
@@ -69,6 +69,13 @@ describe("weekdayLabel", () => {
     expect(weekdayLabel("2026-09-07")).toBe("周一");
     expect(weekdayLabel("2026-09-13")).toBe("周日");
     expect(weekdayLabel("2026-09-14")).toBe("周一");
+  });
+});
+
+describe("dayLabel", () => {
+  it("写成「9月7日」，月份和日去掉前导零", () => {
+    expect(dayLabel("2026-09-07")).toBe("9月7日");
+    expect(dayLabel("2026-12-13")).toBe("12月13日");
   });
 });
 

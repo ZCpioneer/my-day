@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import { DEFAULT_MODEL, type Settings } from "../types";
 import { resolveApiKey } from "../keys";
-import { DEFAULT_DEBUG_KEY } from "../debug/default-key";
+import { DEFAULT_DEBUG_ASR_KEY, DEFAULT_DEBUG_KEY } from "../debug/default-key";
 import { clampSplitHour, DEFAULT_SPLIT_HOUR } from "../ritual";
 
 const KEY = "ai-secretary.settings";
@@ -45,6 +45,7 @@ export async function loadSettings(prefs: Prefs = defaultPrefs()): Promise<Setti
     apiKey: parsed.apiKey ?? "",
     model: parsed.model || DEFAULT_MODEL,
     daySplitHour: clampSplitHour(parsed.daySplitHour ?? DEFAULT_SPLIT_HOUR),
+    asrAppKey: parsed.asrAppKey ?? "",
   };
 }
 
@@ -54,6 +55,10 @@ export async function saveSettings(s: Settings, prefs: Prefs = defaultPrefs()): 
 
 export function effectiveApiKey(s: Settings, fallback: string = DEFAULT_DEBUG_KEY): string | null {
   return resolveApiKey(s.apiKey, fallback);
+}
+
+export function effectiveAsrKey(s: Settings, fallback: string = DEFAULT_DEBUG_ASR_KEY): string | null {
+  return resolveApiKey(s.asrAppKey ?? "", fallback);
 }
 
 const COLLAPSED_KEY = "ai-secretary.collapsed-groups";

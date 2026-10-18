@@ -1,5 +1,6 @@
 import { localDate } from "./dates";
-import { normKey } from "./norm";
+import { normKey, titlesOverlap } from "./norm";
+import { isOverdue } from "./todo-meta";
 import type { Todo } from "./types";
 
 export function todoWhen(t: Pick<Todo, "when">): "today" | "later" {
@@ -19,6 +20,58 @@ export function byOrder(a: Todo, b: Todo): number {
 
 export function isDoneOn(t: Todo, date: string): boolean {
   return t.status === "done" && !!t.completedAt && localDate(new Date(t.completedAt)) === date;
+}
+
+/** 今天桶里、创建日早于当天、还没勾掉：隔夜留下。 */
+export function isLeftover(t: Pick<Todo, "status" | "when" | "sourceDate">, today: string): boolean {
+  return t.status === "open" && todoWhen(t) === "today" && t.sourceDate < today;
+}
+
+/** 以后桶里、截止日期已过、还没勾掉：提到今天去。 */
+export function isOverdueLater(t: Pick<Todo, "status" | "when" | "due">, today: string): boolean {
+  return t.status === "open" && todoWhen(t) === "later" && isOverdue(t.due, today);
+}
+
+/** 编辑补丁：undefined 不动，null 清掉可选字段。 */
+export type TodoPatch = {
+  title?: string;
+  when?: "today" | "later";
+  projectId?: string | null;
+  due?: string | null;
+  estimate?: number | null;
+  priority?: "high" | "normal" | null;
+  reason?: string | null;
+};
+
+export function applyTodoPatch(todo: Todo, patch: TodoPatch): Todo {
+  const next: Todo = { ...todo };
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (title) next.title = title;
+  }
+  if (patch.when !== undefined) next.when = patch.when;
+  if (patch.projectId !== undefined) {
+    if (patch.projectId) next.projectId = patch.projectId;
+    else delete next.projectId;
+  }
+  if (patch.due !== undefined) {
+    if (patch.due) next.due = patch.due;
+    else delete next.due;
+  }
+  if (patch.estimate !== undefined) {
+    if (patch.estimate && patch.estimate > 0) next.estimate = patch.estimate;
+    else delete next.estimate;
+  }
+  if (patch.priority !== undefined) {
+    if (patch.priority === "high") next.priority = "high";
+    else delete next.priority;
+  }
+  if (patch.reason !== undefined) {
+    const reason = patch.reason?.trim();
+    if (reason) next.reason = reason;
+    else delete next.reason;
+  }
+  return next;
 }
 
 export function partitionTodos(todos: Todo[], date: string): {
@@ -90,54 +143,83 @@ function asEntry(e: PlanEntry): { title: string; projectId?: string } {
   return typeof e === "string" ? { title: e } : e;
 }
 
+type PlanRow = { title: string; projectId?: string; when: "today" | "later" };
+
+/** 计划里互相包含的标题合成一条：留更长的；今天优先于以后。 */
+function collapsePlanRows(rows: PlanRow[]): PlanRow[] {
+  const out: PlanRow[] = [];
+  for (const row of rows) {
+    const title = row.title.trim();
+    if (!title) continue;
+    const idx = out.findIndex((o) => titlesOverlap(o.title, title));
+    if (idx < 0) {
+      out.push({ ...row, title });
+      continue;
+    }
+    const prev = out[idx];
+    const incomingLonger = normKey(title).length > normKey(prev.title).length;
+    out[idx] = {
+      title: incomingLonger ? title : prev.title,
+      projectId: (incomingLonger ? row.projectId : prev.projectId) ?? (incomingLonger ? prev.projectId : row.projectId),
+      when: prev.when === "today" || row.when === "today" ? "today" : "later",
+    };
+  }
+  return out;
+}
+
 export function applyFullPlan(
   existing: Todo[],
   plan: { today: PlanEntry[]; later: PlanEntry[] },
   opts: { date: string; nowIso: string; newId: () => string },
 ): Todo[] {
-  const todayWanted = plan.today
-    .map(asEntry)
-    .map((e) => ({ ...e, title: e.title.trim() }))
-    .filter((e) => e.title);
-  const todayNorm = new Set(todayWanted.map((e) => normKey(e.title)));
-  const laterWanted = plan.later
-    .map(asEntry)
-    .map((e) => ({ ...e, title: e.title.trim() }))
-    .filter((e) => e.title && !todayNorm.has(normKey(e.title)));
-  const laterNorm = new Set(laterWanted.map((e) => normKey(e.title)));
-  const projectOf = new Map<string, string | undefined>();
-  for (const e of [...todayWanted, ...laterWanted]) projectOf.set(normKey(e.title), e.projectId);
+  const rows = collapsePlanRows([
+    ...plan.today.map(asEntry).map((e) => ({ ...e, when: "today" as const })),
+    ...plan.later.map(asEntry).map((e) => ({ ...e, when: "later" as const })),
+  ]);
   const next = existing.map((t) => ({ ...t }));
+  const claimed = new Set<string>();
+
+  const applyEntry = (entry: PlanRow) => {
+    const title = entry.title.trim();
+    if (!title) return;
+    const openMatches = next.filter((t) => t.status === "open" && titlesOverlap(t.title, title));
+    const free = openMatches.filter((t) => !claimed.has(t.id));
+    if (openMatches.length > 0 && free.length === 0) {
+      for (const t of openMatches) {
+        if (normKey(title).length > normKey(t.title).length) t.title = title;
+      }
+      return;
+    }
+    if (free.length > 0) {
+      const exact = free.find((t) => normKey(t.title) === normKey(title));
+      const target =
+        exact ?? free.reduce((a, b) => (normKey(a.title).length >= normKey(b.title).length ? a : b));
+      claimed.add(target.id);
+      target.when = entry.when;
+      if (normKey(title).length > normKey(target.title).length) target.title = title;
+      if (entry.projectId) target.projectId = entry.projectId;
+      return;
+    }
+    // 已完成的同名不重新打开。包含关系不挡已完成，避免「支付宝」挡住另一件更长的新事。
+    if (next.some((t) => normKey(t.title) === normKey(title))) return;
+    const row: Todo = {
+      id: opts.newId(),
+      title,
+      status: "open",
+      sourceDate: opts.date,
+      createdAt: opts.nowIso,
+      when: entry.when,
+    };
+    if (entry.projectId) row.projectId = entry.projectId;
+    next.push(row);
+    claimed.add(row.id);
+  };
+
+  for (const entry of rows) applyEntry(entry);
 
   for (const t of next) {
-    if (t.status !== "open") continue;
-    const key = normKey(t.title);
-    if (todayNorm.has(key)) t.when = "today";
-    else if (laterNorm.has(key)) t.when = "later";
-    else if (todoWhen(t) === "today") t.when = "later";
-    const pid = projectOf.get(key);
-    if (pid !== undefined) t.projectId = pid;
-  }
-
-  const existingNorm = new Set(next.map((t) => normKey(t.title)));
-  for (const [list, when] of [
-    [todayWanted, "today"],
-    [laterWanted, "later"],
-  ] as const) {
-    for (const e of list) {
-      if (existingNorm.has(normKey(e.title))) continue;
-      const row: Todo = {
-        id: opts.newId(),
-        title: e.title,
-        status: "open",
-        sourceDate: opts.date,
-        createdAt: opts.nowIso,
-        when,
-      };
-      if (e.projectId) row.projectId = e.projectId;
-      next.push(row);
-      existingNorm.add(normKey(e.title));
-    }
+    if (t.status !== "open" || claimed.has(t.id)) continue;
+    if (todoWhen(t) === "today") t.when = "later";
   }
   return next;
 }

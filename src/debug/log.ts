@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { titlesOverlap } from "../norm";
 import { newId } from "../ids";
 import type { DebugEntry } from "../types";
 
@@ -35,3 +36,15 @@ export const debugLog = reactive({
       .join("\n");
   },
 });
+
+/** 候选里没留下来的标题。能对上留下来的更长标题时写成「旧 → 新」。 */
+export function logDrops(tool: string, before: string[], after: string[]): void {
+  const notes: string[] = [];
+  for (const title of before) {
+    if (!title || after.includes(title)) continue;
+    const hit = after.find((kept) => titlesOverlap(kept, title));
+    notes.push(hit ? `${title} → ${hit}` : title);
+  }
+  if (notes.length === 0) return;
+  debugLog.push({ event: "dedupe", tool, detail: notes.join("；") });
+}

@@ -19,6 +19,8 @@ export interface CorpusCase {
     projects?: string[];
     /** 指定 task 应解析出的预估耗时（分钟）。 */
     estimates?: { task: string; minutes: number }[];
+    /** 指定 task 应标出的置信度；只在写了期望时才比对（向后兼容）。 */
+    confidence?: { task: string; confidence: "high" | "low" }[];
     /** 全空： events/decisions/tasks/projectUpdates/waitings/waitingsResolved 都没有。 */
     chitchat?: boolean;
   };
@@ -36,11 +38,21 @@ export const PARSE_CORPUS: CorpusCase[] = [
   { input: "你说我该不该换工作啊", expect: { chitchat: true, notTasks: ["换工作"] } },
 
   // —— 真正待办 ——
-  { input: "明天下午三点前得把稿子交给编辑", expect: { tasks: ["稿"] } },
-  { input: "记得给妈妈回电话", expect: { tasks: ["回电话"] } },
-  { input: "周五之前把车险续了，很急", expect: { tasks: ["车险"] } },
-  { input: "晚上把垃圾带下楼", expect: { tasks: ["垃圾"] } },
-  { input: "明天记得带伞，要下雨", expect: { tasks: ["带伞"], events: ["下雨"] } },
+  { input: "明天下午三点前得把稿子交给编辑", expect: { tasks: ["稿"], confidence: [{ task: "稿", confidence: "high" }] } },
+  { input: "记得给妈妈回电话", expect: { tasks: ["回电话"], confidence: [{ task: "回电话", confidence: "high" }] } },
+  { input: "周五之前把车险续了，很急", expect: { tasks: ["车险"], confidence: [{ task: "车险", confidence: "high" }] } },
+  { input: "晚上把垃圾带下楼", expect: { tasks: ["垃圾"], confidence: [{ task: "垃圾", confidence: "high" }] } },
+  { input: "明天记得带伞，要下雨", expect: { tasks: ["带伞"], events: ["下雨"], confidence: [{ task: "带伞", confidence: "high" }] } },
+  {
+    input: "好像该给车做保养了",
+    note: "边界：是 task（用户自己的事），但属嘀咕里推测出的可能任务，非明确吩咐",
+    expect: { tasks: ["保养"], confidence: [{ task: "保养", confidence: "low" }] },
+  },
+  {
+    input: "下周部门团建，我可能得准备个节目",
+    note: "边界：带犹豫（可能得…）的可能任务，非明确吩咐",
+    expect: { tasks: ["节目"], confidence: [{ task: "节目", confidence: "low" }] },
+  },
 
   // —— 偏好/目标/感慨：不落任何库（没有记忆层） ——
   { input: "以后早上别给我排会，我上午要写代码", note: "边界：是偏好，但没有记忆层，不该变 task", expect: { chitchat: true, notTasks: ["排会"] } },
@@ -59,7 +71,7 @@ export const PARSE_CORPUS: CorpusCase[] = [
   // —— 项目 / 等待 ——
   {
     input: "新 App 的解析层联调完了，明天开始接 UI",
-    expect: { events: ["联调"], tasks: ["接 UI"] },
+    expect: { events: ["联调"], tasks: ["接 UI"], confidence: [{ task: "接 UI", confidence: "high" }] },
   },
   { input: "房东说下周三前给我答复", expect: { waitings: ["答复"], notTasks: ["答复"] } },
   { input: "出版社还没回我邮件", expect: { waitings: ["邮件"] } },
@@ -68,12 +80,17 @@ export const PARSE_CORPUS: CorpusCase[] = [
   // —— 耗时 / 承接回答（对话上下文参与解析） ——
   {
     input: "下午得去趟银行办房贷，估计要一个半小时",
-    expect: { tasks: ["银行"], estimates: [{ task: "银行", minutes: 90 }] },
+    expect: { tasks: ["银行"], estimates: [{ task: "银行", minutes: 90 }], confidence: [{ task: "银行", confidence: "high" }] },
   },
   {
     input: "我要做一个AI视频",
-    note: "边界：承诺（我要做）≠ 愿望（好想），承诺是 task",
-    expect: { tasks: ["视频"] },
+    note: "一摊事刚冒头，没有具体下一步，先不当 task，秘书去问拆分",
+    expect: { notTasks: ["视频"] },
+  },
+  {
+    input: "研究职业访谈栏目，这个栏目要做起来了",
+    note: "新栏目启动不是 task，也不许因为主题沾边塞进现有项目",
+    expect: { notTasks: ["访谈", "栏目", "研究"] },
   },
   {
     context: [
@@ -82,13 +99,27 @@ export const PARSE_CORPUS: CorpusCase[] = [
     ],
     input: "拆成两步吧：先写脚本，再生成画面",
     note: "回答拆分提问：每一步都抽成 task，并带上上下文里的归属",
-    expect: { tasks: ["脚本", "画面"], projects: ["视频"] },
+    expect: {
+      tasks: ["脚本", "画面"],
+      projects: ["视频"],
+      confidence: [
+        { task: "脚本", confidence: "high" },
+        { task: "画面", confidence: "high" },
+      ],
+    },
   },
   {
     context: [{ role: "assistant", content: "装修这摊事，要拆成哪几步？" }],
     input: "先买瓷砖，再约师傅量尺寸",
     note: "回答拆分提问：两步都该带上归属项目",
-    expect: { tasks: ["瓷砖", "师傅"], projects: ["装修"] },
+    expect: {
+      tasks: ["瓷砖", "师傅"],
+      projects: ["装修"],
+      confidence: [
+        { task: "瓷砖", confidence: "high" },
+        { task: "师傅", confidence: "high" },
+      ],
+    },
   },
   {
     context: [{ role: "assistant", content: "买瓷砖这件事，属于哪摊事？" }],

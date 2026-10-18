@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { composePlan } from "@/agent/compose-plan";
+import { debugLog } from "@/debug/log";
 import type { ChatCompletionRequest, ChatCompletionResponse } from "@/api/deepseek";
 import type { Todo } from "@/types";
 
@@ -108,5 +109,33 @@ describe("composePlan", () => {
     expect(plan.later.find((i) => i.title === "打包")?.project).toBe("搬家");
     // 兜底补回的现有 later 任务带上自己的组名
     expect(plan.later.find((i) => i.title === "周报")?.project).toBe("搬家");
+  });
+
+  it("模型把原标题写长时只留更长的那条，不再把原标题拼回去", async () => {
+    debugLog.clear();
+    const plan = await composePlan({
+      date: "2026-09-05",
+      chat: { date: "2026-09-05", messages: [] },
+      todos: [
+        {
+          id: "1",
+          title: "摸清第一条链路",
+          status: "open",
+          sourceDate: "2026-09-05",
+          createdAt: "2026-09-05T01:00:00.000Z",
+          when: "later",
+        },
+      ],
+      projects: [],
+      model: "deepseek-v4-flash",
+      complete: async () => ({
+        content: '{"today":[],"later":[{"title":"摸清第一条链路：夸克网盘取素材"}]}',
+        tool_calls: [],
+      }),
+    });
+    expect(plan.later.map((i) => i.title)).toEqual(["摸清第一条链路：夸克网盘取素材"]);
+    expect(plan.today).toEqual([]);
+    const dropped = debugLog.entries.find((e) => e.event === "dedupe" && e.tool === "tidy");
+    expect(dropped?.detail).toContain("摸清第一条链路 → 摸清第一条链路：夸克网盘取素材");
   });
 });

@@ -3,6 +3,7 @@ import {
   loadSettings,
   saveSettings,
   effectiveApiKey,
+  effectiveAsrKey,
   loadCollapsedGroups,
   saveCollapsedGroups,
 } from "@/storage/settings";
@@ -38,6 +39,15 @@ describe("settings", () => {
     expect(s.model).toBe("deepseek-v4-pro");
     expect(s.daySplitHour).toBe(18);
   });
+
+  it("roundtrips asrAppKey", async () => {
+    mem.clear();
+    await saveSettings(
+      { apiKey: "", model: DEFAULT_MODEL, daySplitHour: 12, asrAppKey: "sk-asr" },
+      prefs,
+    );
+    expect((await loadSettings(prefs)).asrAppKey).toBe("sk-asr");
+  });
 });
 
 describe("effectiveApiKey", () => {
@@ -48,6 +58,26 @@ describe("effectiveApiKey", () => {
         "sk-debug",
       ),
     ).toBe("sk-debug");
+  });
+});
+
+describe("effectiveAsrKey", () => {
+  it("设置里有 Key 就用设置的", () => {
+    expect(
+      effectiveAsrKey(
+        { apiKey: "", model: DEFAULT_MODEL, daySplitHour: 12, asrAppKey: " sk-mine " },
+        "sk-debug-asr",
+      ),
+    ).toBe("sk-mine");
+  });
+
+  it("没填就用内置调试 Key", () => {
+    expect(
+      effectiveAsrKey(
+        { apiKey: "", model: DEFAULT_MODEL, daySplitHour: 12, asrAppKey: "" },
+        "sk-debug-asr",
+      ),
+    ).toBe("sk-debug-asr");
   });
 });
 

@@ -2,19 +2,38 @@
   "name": "ai-secretary",
   "private": true,
   "version": "0.1.0",
+  "description": "本地优先的单用户 Android 日程秘书：随口说，确认后才记待办，晚上写成日记。",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZCpioneer/my-day.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ZCpioneer/my-day/issues"
+  },
+  "homepage": "https://github.com/ZCpioneer/my-day#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "prepare": "node scripts/ensure-debug-key.mjs",
+    "predev": "node scripts/ensure-debug-key.mjs",
+    "pretest": "node scripts/ensure-debug-key.mjs",
+    "prebuild": "node scripts/ensure-debug-key.mjs",
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:parse": "vitest run --config vitest.eval.config.ts",
-    "cap:sync": "npm run build && npx cap sync android"
+    "cap:sync": "npm run build && npx cap sync android",
+    "check:secrets": "node scripts/check-no-secrets.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0",
+    "@capacitor/local-notifications": "^7.0.7",
     "@capacitor/preferences": "^7.0.0",
     "vue": "^3.5.13"
   },

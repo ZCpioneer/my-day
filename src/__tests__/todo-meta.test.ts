@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueLabel, estimateLabel, isOverdue, todoMeta } from "@/todo-meta";
+import { composeDue, dueLabel, estimateLabel, isOverdue, splitDue, todoMeta } from "@/todo-meta";
 
 describe("dueLabel", () => {
   const today = "2026-09-06";
@@ -31,6 +31,17 @@ describe("isOverdue", () => {
     expect(isOverdue("2026-09-06", "2026-09-06")).toBe(false);
     expect(isOverdue("下周三", "2026-09-06")).toBe(false);
     expect(isOverdue(undefined, "2026-09-06")).toBe(false);
+  });
+});
+
+describe("composeDue / splitDue", () => {
+  it("只有日期、带时刻、清空", () => {
+    expect(composeDue("2026-09-08")).toBe("2026-09-08");
+    expect(composeDue("2026-09-08", "15:30")).toBe("2026-09-08T15:30");
+    expect(composeDue("")).toBeUndefined();
+    expect(splitDue("2026-09-08T15:30")).toEqual({ date: "2026-09-08", time: "15:30" });
+    expect(splitDue("2026-09-08")).toEqual({ date: "2026-09-08", time: "" });
+    expect(splitDue(undefined)).toEqual({ date: "", time: "" });
   });
 });
 

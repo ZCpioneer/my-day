@@ -1,25 +1,32 @@
 import { closeVisibleSession } from "../chat-session";
 import { newId } from "../ids";
-import { applyFullPlan, applyMove, applyTodayPlan, type PlanEntry } from "../todos";
+import { applyFullPlan, applyMove, applyTodayPlan, applyTodoPatch, type PlanEntry, type TodoPatch } from "../todos";
 import { applyProjectMove } from "../todo-groups";
 import { localDate, shiftLocalDate } from "../dates";
 import { normKey } from "../norm";
-import type { ChatMessage, DailyLog, DayChat, Project, TimelineEvent, Todo, Waiting } from "../types";
+import type { ChatMessage, DailyLog, DayChat, Project, TimelineEvent, Todo, Waiting, WeeklyLog } from "../types";
 
 const DB_NAME = "ai-secretary";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
-      db.createObjectStore("chats", { keyPath: "date" });
-      db.createObjectStore("todos", { keyPath: "id" });
-      db.createObjectStore("logs", { keyPath: "date" });
-      db.createObjectStore("events", { keyPath: "id" });
-      db.createObjectStore("projects", { keyPath: "id" });
-      db.createObjectStore("waitings", { keyPath: "id" });
+      const oldVersion = event.oldVersion;
+      if (oldVersion < 1) {
+        db.createObjectStore("chats", { keyPath: "date" });
+        db.createObjectStore("todos", { keyPath: "id" });
+        db.createObjectStore("logs", { keyPath: "date" });
+        db.createObjectStore("events", { keyPath: "id" });
+        db.createObjectStore("projects", { keyPath: "id" });
+        db.createObjectStore("waitings", { keyPath: "id" });
+      }
+      // v2：新增周报 store，v1 各 store 原样保留。
+      if (oldVersion < 2) {
+        db.createObjectStore("weekly", { keyPath: "week" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -161,6 +168,25 @@ export const todoRepo = {
     await txDone(tx);
     db.close();
   },
+  async update(id: string, patch: TodoPatch): Promise<Todo> {
+    const db = await openDb();
+    const tx = db.transaction("todos", "readwrite");
+    const store = tx.objectStore("todos");
+    const todo = await new Promise<Todo>((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result as Todo);
+      req.onerror = () => reject(req.error);
+    });
+    if (!todo) {
+      db.close();
+      throw new Error("todo not found");
+    }
+    const next = applyTodoPatch(todo, patch);
+    store.put(next);
+    await txDone(tx);
+    db.close();
+    return next;
+  },
   async setProject(id: string, projectId: string | null): Promise<void> {
     const db = await openDb();
     const tx = db.transaction("todos", "readwrite");
@@ -246,6 +272,36 @@ export const logRepo = {
   },
 };
 
+export const weeklyRepo = {
+  async get(week: string): Promise<WeeklyLog | null> {
+    const db = await openDb();
+    const row = await new Promise<WeeklyLog | undefined>((resolve, reject) => {
+      const req = db.transaction("weekly").objectStore("weekly").get(week);
+      req.onsuccess = () => resolve(req.result as WeeklyLog | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return row ?? null;
+  },
+  async list(): Promise<WeeklyLog[]> {
+    const db = await openDb();
+    const rows = await new Promise<WeeklyLog[]>((resolve, reject) => {
+      const req = db.transaction("weekly").objectStore("weekly").getAll();
+      req.onsuccess = () => resolve(req.result as WeeklyLog[]);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rows.sort((a, b) => (a.week < b.week ? 1 : a.week > b.week ? -1 : 0));
+  },
+  async put(log: WeeklyLog): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("weekly", "readwrite");
+    tx.objectStore("weekly").put(log);
+    await txDone(tx);
+    db.close();
+  },
+};
+
 export const eventRepo = {
   async add(e: TimelineEvent): Promise<void> {
     const db = await openDb();
@@ -314,6 +370,13 @@ export const projectRepo = {
     const db = await openDb();
     const tx = db.transaction("projects", "readwrite");
     tx.objectStore("projects").put(p);
+    await txDone(tx);
+    db.close();
+  },
+  async remove(id: string): Promise<void> {
+    const db = await openDb();
+    const tx = db.transaction("projects", "readwrite");
+    tx.objectStore("projects").delete(id);
     await txDone(tx);
     db.close();
   },

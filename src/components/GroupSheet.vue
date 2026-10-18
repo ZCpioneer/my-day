@@ -34,6 +34,13 @@
         <button v-else-if="group?.status !== 'done'" class="sheet-opt" type="button" data-complete @click="emit('complete', true)">
           完成项目
         </button>
+        <button
+          v-if="(openCount ?? 0) === 0"
+          class="sheet-opt sheet-danger"
+          type="button"
+          data-group-delete
+          @click="emit('remove')"
+        >删除这个组</button>
       </template>
       <button class="sheet-close" type="button" @click="emit('close')">取消</button>
     </div>
@@ -41,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { Project } from "@/types";
 
 const props = defineProps<{
@@ -55,12 +62,19 @@ const emit = defineEmits<{
   pick: [projectId: string | null, newTitle?: string];
   rename: [title: string];
   complete: [done: boolean];
+  remove: [];
   close: [];
 }>();
 
 const openProjects = computed(() => props.projects.filter((p) => p.status !== "done"));
 const newTitle = ref("");
-const renameTitle = ref("");
+const renameTitle = ref(props.group?.title ?? "");
+watch(
+  () => props.group?.title,
+  (t) => {
+    renameTitle.value = t ?? "";
+  },
+);
 
 function onNew() {
   const t = newTitle.value.trim();

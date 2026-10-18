@@ -1,5 +1,12 @@
 <template>
   <div class="todo-swipe" :class="{ open: revealed, slot: lifted, holding }" :data-todo="todo.id">
+    <button
+      v-if="!done"
+      class="todo-shift"
+      type="button"
+      data-todo-shift
+      @click.stop="emit('shift', todo.id)"
+    >{{ shiftLabel }}</button>
     <button class="todo-act" type="button" data-todo-group @click.stop="emit('group', todo.id)">分组</button>
     <button class="todo-del" type="button" data-todo-del @click.stop="emit('remove', todo.id)">删除</button>
     <div
@@ -14,10 +21,11 @@
       @click="onClick"
       @contextmenu.prevent
     >
-      <div class="box">{{ done ? "✓" : "" }}</div>
+      <div class="box" data-todo-box>{{ done ? "✓" : "" }}</div>
       <div>
-        <p>{{ todo.title }}</p>
+        <p data-todo-title>{{ todo.title }}</p>
         <p v-if="todo.reason" class="todo-why">{{ todo.reason }}</p>
+        <p v-if="leftover" class="todo-flag">留下</p>
         <p v-if="meta" class="todo-meta" :class="{ hot: todo.priority === 'high', overdue }">{{ meta }}</p>
       </div>
     </div>
@@ -29,17 +37,25 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { localDate } from "@/dates";
 import { HOLD_MS, movementCancelsHold } from "@/todo-drag";
 import { isOverdue, todoMeta } from "@/todo-meta";
+import { todoWhen } from "@/todos";
 import type { Todo } from "@/types";
 
-const BTN_W = 76;
-const OPEN_X = -BTN_W * 2;
+const BTN_W = 64;
+const SNAP_X = -40;
 
 const props = defineProps<{
   todo: Todo;
   done?: boolean;
   revealed?: boolean;
+  leftover?: boolean;
   projectTitle?: string;
 }>();
+
+function openX(): number {
+  return props.done ? -BTN_W * 2 : -BTN_W * 3;
+}
+
+const shiftLabel = computed(() => (todoWhen(props.todo) === "today" ? "以后" : "今天"));
 
 const meta = computed(() =>
   todoMeta(
@@ -56,9 +72,11 @@ const emit = defineEmits<{
   drag: [id: string, clientY: number];
   drop: [id: string, clientY: number];
   group: [id: string];
+  shift: [id: string];
+  edit: [id: string];
 }>();
 
-const x = ref(props.revealed ? OPEN_X : 0);
+const x = ref(props.revealed ? openX() : 0);
 const dragging = ref(false);
 const lifted = ref(false);
 const holding = ref(false);
@@ -77,7 +95,7 @@ let bound = false;
 watch(
   () => props.revealed,
   (on) => {
-    if (!dragging.value && !lifted.value) x.value = on ? OPEN_X : 0;
+    if (!dragging.value && !lifted.value) x.value = on ? openX() : 0;
   },
 );
 
@@ -134,7 +152,7 @@ function onDown(e: PointerEvent) {
   startX = e.clientX;
   startY = e.clientY;
   lastY = e.clientY;
-  origin = props.revealed ? OPEN_X : 0;
+  origin = props.revealed ? openX() : 0;
   pointerId = e.pointerId;
   const el = e.currentTarget as HTMLElement;
   el.setPointerCapture?.(e.pointerId);
@@ -181,7 +199,7 @@ function onMove(e: PointerEvent) {
   if (axis !== "x") return;
   e.preventDefault();
   swiped = true;
-  x.value = Math.min(0, Math.max(OPEN_X, origin + dx));
+  x.value = Math.min(0, Math.max(openX(), origin + dx));
 }
 
 function onCancel(e: PointerEvent) {
@@ -211,15 +229,15 @@ function onUp(e: PointerEvent) {
   pointerId = null;
   axis = null;
   if (!wasX) {
-    x.value = props.revealed ? OPEN_X : 0;
+    x.value = props.revealed ? openX() : 0;
     return;
   }
-  const open = x.value < OPEN_X / 2;
-  x.value = open ? OPEN_X : 0;
+  const open = x.value < SNAP_X;
+  x.value = open ? openX() : 0;
   emit("reveal", open ? props.todo.id : null);
 }
 
-function onClick() {
+function onClick(e: MouseEvent) {
   if (didLift) {
     didLift = false;
     return;
@@ -232,6 +250,8 @@ function onClick() {
     emit("reveal", null);
     return;
   }
-  emit("toggle", props.todo.id);
+  // 点勾选框才勾；点标题打开编辑（防误勾）。
+  if ((e.target as HTMLElement | null)?.closest(".box")) emit("toggle", props.todo.id);
+  else emit("edit", props.todo.id);
 }
 </script>

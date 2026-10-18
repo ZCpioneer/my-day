@@ -1,4 +1,5 @@
-import { byOrder, todoWhen } from "./todos";
+import { localDate } from "./dates";
+import { byOrder, isOverdueLater, todoWhen } from "./todos";
 import type { Project, Todo } from "./types";
 
 /** 「以后」栏的一个分区：某个项目组，或未分组区（project 为 null）。 */
@@ -32,13 +33,14 @@ export function sortProjects(projects: Project[]): Project[] {
 
 /** 「以后」栏分区：进行中组（含空组，便于拖入）→ 未分组区。
  *  已完成组不显示——已完成的事不再关心分组；重打开任务会经 syncProjectStatuses 把组激活回来。 */
-export function partitionLater(todos: Todo[], projects: Project[]): LaterSection[] {
+export function partitionLater(todos: Todo[], projects: Project[], today: string = localDate()): LaterSection[] {
   const sections: LaterSection[] = [];
   const known = new Set(projects.map((p) => p.id));
+  const laterOpen = (t: Todo) => t.status === "open" && todoWhen(t) === "later" && !isOverdueLater(t, today);
   for (const p of sortProjects(projects)) {
     if (p.status === "done") continue;
     const mine = todos.filter((t) => t.projectId === p.id);
-    const open = mine.filter((t) => t.status === "open" && todoWhen(t) === "later").sort(byOrder);
+    const open = mine.filter(laterOpen).sort(byOrder);
     sections.push({
       project: p,
       todos: open,
@@ -47,7 +49,7 @@ export function partitionLater(todos: Todo[], projects: Project[]): LaterSection
     });
   }
   const stray = todos
-    .filter((t) => t.status === "open" && todoWhen(t) === "later" && (!t.projectId || !known.has(t.projectId)))
+    .filter((t) => laterOpen(t) && (!t.projectId || !known.has(t.projectId)))
     .sort(byOrder);
   if (stray.length > 0) {
     sections.push({ project: null, todos: stray, doneCount: 0, totalCount: stray.length });

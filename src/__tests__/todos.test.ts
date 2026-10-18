@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { applyFullPlan, applyMove, applyTodayPlan, partitionTodos, snapshotLogTitles, todoWhen } from "@/todos";
+import {
+  applyFullPlan,
+  applyMove,
+  applyTodayPlan,
+  applyTodoPatch,
+  isLeftover,
+  isOverdueLater,
+  partitionTodos,
+  snapshotLogTitles,
+  todoWhen,
+} from "@/todos";
 import type { Todo } from "@/types";
 
 function todo(over: Partial<Todo> & Pick<Todo, "id" | "title">): Todo {
@@ -52,6 +62,69 @@ describe("partitionTodos", () => {
       todo({ id: "d", title: "丁", when: "today", createdAt: "2026-09-05T02:00:00.000Z" }),
     ];
     expect(partitionTodos(rows, "2026-09-05").today.map((t) => t.id)).toEqual(["a", "b", "d", "c"]);
+  });
+});
+
+describe("isLeftover", () => {
+  it("今天桶里 sourceDate 早于当天的未完成算留下", () => {
+    expect(isLeftover(todo({ id: "a", title: "昨天的", when: "today", sourceDate: "2026-09-04" }), "2026-09-05")).toBe(
+      true,
+    );
+    expect(isLeftover(todo({ id: "b", title: "今天的", when: "today", sourceDate: "2026-09-05" }), "2026-09-05")).toBe(
+      false,
+    );
+    expect(isLeftover(todo({ id: "c", title: "以后", when: "later", sourceDate: "2026-09-04" }), "2026-09-05")).toBe(
+      false,
+    );
+  });
+});
+
+describe("isOverdueLater", () => {
+  it("以后桶带已过截止日期的未完成算逾期", () => {
+    expect(
+      isOverdueLater(todo({ id: "a", title: "交稿", when: "later", due: "2026-09-04" }), "2026-09-05"),
+    ).toBe(true);
+    expect(
+      isOverdueLater(todo({ id: "b", title: "明天", when: "later", due: "2026-09-06" }), "2026-09-05"),
+    ).toBe(false);
+    expect(
+      isOverdueLater(todo({ id: "c", title: "今天的", when: "today", due: "2026-09-04" }), "2026-09-05"),
+    ).toBe(false);
+  });
+});
+
+describe("applyTodoPatch", () => {
+  it("改标题/桶/截止，null 清掉可选字段", () => {
+    const row = todo({
+      id: "a",
+      title: "旧名",
+      when: "later",
+      due: "2026-09-08",
+      priority: "high",
+      estimate: 30,
+      reason: "赶工",
+      projectId: "p1",
+    });
+    const next = applyTodoPatch(row, {
+      title: " 新名 ",
+      when: "today",
+      due: null,
+      priority: null,
+      estimate: null,
+      reason: null,
+      projectId: null,
+    });
+    expect(next).toMatchObject({ title: "新名", when: "today" });
+    expect(next.due).toBeUndefined();
+    expect(next.priority).toBeUndefined();
+    expect(next.estimate).toBeUndefined();
+    expect(next.reason).toBeUndefined();
+    expect(next.projectId).toBeUndefined();
+  });
+
+  it("空标题不覆盖", () => {
+    const row = todo({ id: "a", title: "旧名" });
+    expect(applyTodoPatch(row, { title: "   " }).title).toBe("旧名");
   });
 });
 
@@ -234,6 +307,29 @@ describe("applyFullPlan", () => {
     expect(next.find((t) => t.title === "买机票")?.projectId).toBe("p2");
     // 裸标题不清空已有归属
     expect(next.find((t) => t.id === "b")?.projectId).toBe("p9");
+  });
+
+  it("标题只是被写长时改原条，不新插；中间多字的不并", () => {
+    const existing: Todo[] = [
+      todo({ id: "a", title: "摸清第一条链路", when: "later", projectId: "p1" }),
+      todo({ id: "b", title: "写一封周岁信", when: "later" }),
+    ];
+    const next = applyFullPlan(
+      existing,
+      {
+        today: [],
+        later: ["摸清第一条链路", "摸清第一条链路：夸克网盘取素材", "写周岁信"],
+      },
+      { date: "2026-09-05", nowIso: "2026-09-05T05:00:00.000Z", newId: () => "new-1" },
+    );
+    expect(next.filter((t) => t.title.includes("第一条"))).toHaveLength(1);
+    expect(next.find((t) => t.id === "a")).toMatchObject({
+      title: "摸清第一条链路：夸克网盘取素材",
+      when: "later",
+      projectId: "p1",
+    });
+    expect(next.find((t) => t.id === "b")?.title).toBe("写一封周岁信");
+    expect(next.find((t) => t.id === "new-1")?.title).toBe("写周岁信");
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildContextMessages } from "@/agent/context";
-import { clampSplitHour, ritualForHour } from "@/ritual";
+import { clampSplitHour, ritualForHour, ritualForNow } from "@/ritual";
 import type { ChatMessage, Todo } from "@/types";
 
 describe("ritualForHour", () => {
@@ -19,6 +19,12 @@ describe("ritualForHour", () => {
   it("clamps split hour", () => {
     expect(clampSplitHour(-3)).toBe(0);
     expect(clampSplitHour(30)).toBe(23);
+    expect(clampSplitHour(Number.NaN)).toBe(12);
+  });
+
+  it("ritualForNow 用 Date.getHours", () => {
+    expect(ritualForNow(new Date(2026, 8, 7, 11, 59), 12)).toBe("morning");
+    expect(ritualForNow(new Date(2026, 8, 7, 12, 0), 12)).toBe("evening");
   });
 });
 

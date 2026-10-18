@@ -33,6 +33,17 @@ export function scoreCase(c: CorpusCase, r: ParseResult): ScoreResult {
     if (!t) misses.push(`缺 task:${e.task}（估时）`);
     else if (t.estimate !== e.minutes) misses.push(`task:${e.task} 估时应为 ${e.minutes} 分钟，实际 ${t.estimate ?? "无"}`);
   }
+  // 置信度比对：期望里写了才比；缺失按 low 处理。路由不再按置信度分流，此字段只服务语料。
+  for (const cf of c.expect.confidence ?? []) {
+    const t = r.tasks.find((x) => hit([normKey(x.title)], cf.task));
+    if (!t) misses.push(`缺 task:${cf.task}（置信度）`);
+    else {
+      const actual = t.confidence ?? "low";
+      if (actual !== cf.confidence) {
+        misses.push(`task:${cf.task} 置信度应为 ${cf.confidence}，实际 ${t.confidence ?? "无（按 low）"}`);
+      }
+    }
+  }
   if (c.expect.chitchat && !isChitchat(r)) misses.push("应为纯闲聊");
   return { pass: misses.length === 0, misses };
 }

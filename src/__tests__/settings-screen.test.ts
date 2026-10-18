@@ -19,4 +19,32 @@ describe("SettingsScreen 语音", () => {
     expect(text).not.toContain("豆包");
     expect(w.findAll("input[type=password]")).toHaveLength(2);
   });
+
+  it("保存 emit 当前草稿", async () => {
+    const w = mount(SettingsScreen, {
+      props: {
+        settings: { apiKey: "", model: DEFAULT_MODEL, daySplitHour: 12, asrAppKey: "" },
+      },
+    });
+    await w.get("input[type=password]").setValue("sk-user");
+    await w.get("select").setValue("deepseek-v4-pro");
+    await w.get("input[type=number]").setValue("18");
+    await w.get(".btn-save").trigger("click");
+    expect(w.emitted("save")?.[0]?.[0]).toEqual({
+      apiKey: "sk-user",
+      model: "deepseek-v4-pro",
+      daySplitHour: 18,
+      asrAppKey: "",
+    });
+  });
+
+  it("分界小时不是有限数字时 emit 12", async () => {
+    const w = mount(SettingsScreen, {
+      props: {
+        settings: { apiKey: "", model: DEFAULT_MODEL, daySplitHour: Number.NaN, asrAppKey: "" },
+      },
+    });
+    await w.get(".btn-save").trigger("click");
+    expect((w.emitted("save")?.[0]?.[0] as { daySplitHour: number }).daySplitHour).toBe(12);
+  });
 });

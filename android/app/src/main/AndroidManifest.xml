@@ -39,4 +39,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Capacitor WebChromeClient 申请麦克风时会连同 RECORD_AUDIO 一起要这个；
+         清单里没有的话，系统已授权录音也会被当成整次拒绝。 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>

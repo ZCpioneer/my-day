@@ -107,9 +107,6 @@ describe("catchUpDiary", () => {
   };
   const log: DailyLog = {
     date: "2026-09-04",
-    plan: "先做支付宝",
-    done: ["支付宝"],
-    undone: ["周报"],
     state: "还行",
     updatedAt: "2026-09-05T00:01:00.000Z",
   };
@@ -139,7 +136,7 @@ describe("catchUpDiary", () => {
       compose: async (d) => ({ ...log, date: d }),
     });
     expect(wrote).toBe("2026-09-04");
-    expect(logs.get("2026-09-04")?.plan).toBe("先做支付宝");
+    expect(logs.get("2026-09-04")?.state).toBe("还行");
     expect(todos[0].when).toBe("today");
     expect(todos[0].status).toBe("open");
   });
@@ -165,7 +162,7 @@ describe("catchUpDiary", () => {
   });
 
   it("does not overwrite an existing log", async () => {
-    const logs = new Map<string, DailyLog>([["2026-09-04", { ...log, plan: "已经有了" }]]);
+    const logs = new Map<string, DailyLog>([["2026-09-04", { ...log, state: "已经有了" }]]);
     let composed = 0;
     const wrote = await catchUpDiary({
       today: "2026-09-05",
@@ -178,12 +175,12 @@ describe("catchUpDiary", () => {
       },
       compose: async () => {
         composed += 1;
-        return { ...log, plan: "新的" };
+        return { ...log, state: "新的" };
       },
     });
     expect(wrote).toBeNull();
     expect(composed).toBe(0);
-    expect(logs.get("2026-09-04")?.plan).toBe("已经有了");
+    expect(logs.get("2026-09-04")?.state).toBe("已经有了");
   });
 
   it("skips put when compose throws", async () => {

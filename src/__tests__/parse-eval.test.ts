@@ -23,4 +23,26 @@ describe("scoreCase", () => {
     expect(scoreCase(c, emptyParseResult()).pass).toBe(true);
     expect(scoreCase(c, { ...emptyParseResult(), events: ["有事"] }).pass).toBe(false);
   });
+
+  it("confidence：期望与实际一致才过", () => {
+    const c: CorpusCase = { input: "x", expect: { tasks: ["交稿"], confidence: [{ task: "交稿", confidence: "high" }] } };
+    expect(scoreCase(c, { ...emptyParseResult(), tasks: [{ title: "明天交稿", confidence: "high" }] }).pass).toBe(true);
+    const s = scoreCase(c, { ...emptyParseResult(), tasks: [{ title: "明天交稿", confidence: "low" }] });
+    expect(s.pass).toBe(false);
+    expect(s.misses.join()).toContain("置信度应为 high");
+  });
+
+  it("confidence：实际缺失按 low 比对", () => {
+    const cLow: CorpusCase = { input: "x", expect: { tasks: ["保养"], confidence: [{ task: "保养", confidence: "low" }] } };
+    expect(scoreCase(cLow, { ...emptyParseResult(), tasks: [{ title: "给车做保养" }] }).pass).toBe(true);
+    const cHigh: CorpusCase = { input: "x", expect: { tasks: ["保养"], confidence: [{ task: "保养", confidence: "high" }] } };
+    const s = scoreCase(cHigh, { ...emptyParseResult(), tasks: [{ title: "给车做保养" }] });
+    expect(s.pass).toBe(false);
+    expect(s.misses.join()).toContain("置信度应为 high");
+  });
+
+  it("confidence：期望没写就跳过（向后兼容）", () => {
+    const c: CorpusCase = { input: "x", expect: { tasks: ["交稿"] } };
+    expect(scoreCase(c, { ...emptyParseResult(), tasks: [{ title: "明天交稿", confidence: "low" }] }).pass).toBe(true);
+  });
 });

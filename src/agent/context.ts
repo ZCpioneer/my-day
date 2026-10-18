@@ -1,6 +1,7 @@
 import type { ApiMessage } from "@/api/deepseek";
 import { normKey } from "@/norm";
 import { todoMeta } from "@/todo-meta";
+import { isClarifyQuestion } from "./clarify";
 import { isChitchat } from "./parse";
 import type {
   ChatMessage,
@@ -40,9 +41,7 @@ export function formatBucket(label: string, todos: Todo[], today?: string, proje
 }
 
 function formatYesterdayLog(log: DailyLog): string {
-  const done = log.done.length ? log.done.join("；") : "无";
-  const undone = log.undone.length ? log.undone.join("；") : "无";
-  return `昨天的日记：计划「${log.plan}」；做成了：${done}；没做完：${undone}；状态：${log.state}。`;
+  return `昨天的日记：${log.mood ? `${log.mood} ` : ""}${log.state}`;
 }
 
 function formatProjects(projects: Project[]): string {
@@ -56,7 +55,7 @@ function formatWaitings(waitings: Waiting[]): string {
   return `等待中 ${waitings.length} 件：${waitings.map((w) => (w.waitingOn ? `${w.text}（等${w.waitingOn}）` : w.text)).join("；")}。`;
 }
 
-export function matchedProjectKeys(result: ParseResult): string[] {
+function matchedProjectKeys(result: ParseResult): string[] {
   const keys = new Set<string>();
   for (const u of result.projectUpdates) keys.add(normKey(u.project));
   for (const t of result.tasks) if (t.project) keys.add(normKey(t.project));
@@ -73,6 +72,14 @@ export function selectRelevantEvents(
   const keys = matchedProjectKeys(result);
   const picked = events.filter((e) => e.date === today || keys.some((k) => normKey(e.text).includes(k)));
   return picked.slice(-10);
+}
+
+function stageLine(messages: ChatMessage[]): string {
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  if (lastAssistant && isClarifyQuestion(lastAssistant.content)) {
+    return "阶段：用户在回答你上一问。谈清了才能提议。";
+  }
+  return "阶段：普通。一摊事刚冒头只问一句，禁止提议。";
 }
 
 function formatEvents(events: TimelineEvent[]): string {
@@ -106,6 +113,7 @@ export function buildContextMessages(input: {
     formatProjects(input.projects ?? []),
     formatWaitings(input.waitings ?? []),
     formatEvents(selectRelevantEvents(input.recentEvents ?? [], input.parseResult, input.date)),
+    stageLine(input.messages),
     "待办列表是唯一真相。有没有完成，只看上面的分区，不要根据聊天记录判断。以后不算没做完。",
   ].join("");
   const history: ApiMessage[] = input.messages.slice(-HISTORY_LIMIT).map((m) => ({

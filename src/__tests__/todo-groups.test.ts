@@ -87,6 +87,17 @@ describe("partitionLater", () => {
     expect(s.project).toBeNull();
     expect(s.todos.map((t) => t.id)).toEqual(["t1"]);
   });
+
+  it("逾期的以后事项不进以后分区（提到今天去）", () => {
+    const ps = [project({ id: "p1" })];
+    const ts = [
+      todo({ id: "t1", projectId: "p1", when: "later", due: "2026-09-01" }),
+      todo({ id: "t2", projectId: "p1", when: "later", due: "2026-09-10" }),
+    ];
+    const [s] = partitionLater(ts, ps, "2026-09-06");
+    expect(s.todos.map((t) => t.id)).toEqual(["t2"]);
+    expect(s.totalCount).toBe(2);
+  });
 });
 
 describe("syncProjectStatuses", () => {

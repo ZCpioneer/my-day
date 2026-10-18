@@ -5,7 +5,14 @@
         <h2>今日</h2>
         <div class="todo-head-meta">
           <div class="count">{{ doneTodayPlan.length }} / {{ today.length + doneTodayPlan.length }}</div>
-          <div class="todo-hint">左滑删除 · 长按拖动</div>
+          <button
+            class="todo-tidy"
+            type="button"
+            data-todo-tidy
+            :disabled="awaiting"
+            @click="emit('tidy')"
+          >整理</button>
+          <div class="todo-hint">点开可改 · 左滑移动/分组/删除 · 长按拖动</div>
         </div>
       </div>
       <div
@@ -14,10 +21,31 @@
         :class="{ 'drop-end': insert?.bucket === 'today' && insert.beforeId === null }"
       >
         <div class="section-label">今天</div>
+        <template v-if="overdue.length">
+          <div class="section-label sub">逾期</div>
+          <TodoRow
+            v-for="t in overdue"
+            :key="t.id"
+            :todo="t"
+            :project-title="projectTitles.get(t.projectId ?? '')"
+            :class="{ 'drop-before': insert?.bucket === 'today' && insert.beforeId === t.id }"
+            :revealed="openId === t.id"
+            @toggle="emit('toggle', $event)"
+            @remove="emit('remove', $event)"
+            @reveal="openId = $event"
+            @lift="onLift"
+            @drag="onDrag"
+            @drop="onDrop"
+            @group="onRowGroup"
+            @shift="onShift"
+            @edit="onRowEdit"
+          />
+        </template>
         <TodoRow
           v-for="t in today"
           :key="t.id"
           :todo="t"
+          :leftover="isLeftover(t, todayDate)"
           :project-title="projectTitles.get(t.projectId ?? '')"
           :class="{ 'drop-before': insert?.bucket === 'today' && insert.beforeId === t.id }"
           :revealed="openId === t.id"
@@ -28,8 +56,13 @@
           @drag="onDrag"
           @drop="onDrop"
           @group="onRowGroup"
+          @shift="onShift"
+          @edit="onRowEdit"
         />
-        <p v-if="today.length === 0" class="empty" style="margin: 8px 0">还没定今天做哪几件。</p>
+        <p v-if="today.length === 0 && overdue.length === 0" class="empty empty-cta">
+          还没定今天做哪几件。
+          <button type="button" data-empty-add-today @click="openAdd('today')">加上一件</button>
+        </p>
       </div>
       <div class="todo-bucket" data-bucket="later">
         <div class="section-label">以后</div>
@@ -87,11 +120,16 @@
               @drag="onDrag"
               @drop="onDrop"
               @group="onRowGroup"
+              @shift="onShift"
+              @edit="onRowEdit"
             />
           </template>
         </div>
         <button class="group-add" data-group-add type="button" @click="sheet = { mode: 'create' }">＋ 新建组</button>
-        <p v-if="later.length === 0 && laterSections.length === 0" class="empty" style="margin: 8px 0">没有记着的事。</p>
+        <p v-if="laterVisible === 0 && laterSections.length === 0" class="empty empty-cta">
+          没有记着的事。
+          <button type="button" data-empty-add-later @click="openAdd('later')">记一件</button>
+        </p>
       </div>
       <div class="todo-bucket" data-bucket="done">
         <div class="section-label">已完成</div>
@@ -106,8 +144,19 @@
           @remove="emit('remove', $event)"
           @reveal="openId = $event"
           @group="onRowGroup"
+          @edit="onRowEdit"
         />
         <p v-if="doneToday.length === 0" class="empty" style="margin: 8px 0">还没勾过。</p>
+      </div>
+      <div v-if="(waitings ?? []).length" class="todo-bucket" data-bucket="waiting">
+        <div class="section-label">在等</div>
+        <div v-for="w in waitings" :key="w.id" class="waiting-row" :data-waiting="w.id">
+          <div>
+            <p>{{ w.text }}</p>
+            <p v-if="w.waitingOn" class="todo-why">等{{ w.waitingOn }}</p>
+          </div>
+          <button type="button" data-waiting-done @click="emit('resolveWaiting', w.id)">等到了</button>
+        </div>
       </div>
     </div>
     <div
@@ -117,6 +166,18 @@
     >
       {{ ghost.title }}
     </div>
+    <button
+      v-show="!liftId && !draft"
+      class="todo-fab"
+      type="button"
+      data-todo-add
+      aria-label="新增待办"
+      @click="openAdd('today')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
     <GroupSheet
       v-if="sheet"
       :mode="sheet.mode"
@@ -127,23 +188,62 @@
       @pick="onSheetPick"
       @rename="onSheetRename"
       @complete="onSheetComplete"
+      @remove="onSheetDeleteGroup"
       @close="sheet = null"
     />
+    <TodoDraftSheet
+      v-if="draft"
+      :mode="draft.mode"
+      :projects="projects ?? []"
+      :initial="draft.initial"
+      @submit="onDraftSubmit"
+      @close="draft = null"
+    />
+    <div v-if="pendingPropose?.length" class="sheet-mask" data-propose-sheet @click.self="emit('skip')">
+      <div class="sheet propose-sheet">
+        <TodoConfirm
+          :items="pendingPropose"
+          :heading="proposeKind === 'today' ? '这样排可以吗？' : '记到「以后」吗？'"
+          :yes-label="proposeKind === 'today' ? '确认这次整理' : '确认记下'"
+          :no-label="proposeKind === 'today' ? '先不定' : '这次不加'"
+          :note="proposeKind === 'today' ? '确认后这段对话会清空，可以重新聊。' : undefined"
+          :existing-projects="existingProjects ?? []"
+          @confirm="emit('confirm', $event)"
+          @skip="emit('skip')"
+        />
+      </div>
+    </div>
+    <div v-if="undoTitle" class="todo-undo" data-todo-undo>
+      已删除「{{ undoTitle }}」
+      <button type="button" data-todo-undo-btn @click="emit('undoRemove')">撤销</button>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import GroupSheet from "@/components/GroupSheet.vue";
+import TodoConfirm from "@/components/TodoConfirm.vue";
+import TodoDraftSheet from "@/components/TodoDraftSheet.vue";
 import TodoRow from "@/components/TodoRow.vue";
 import { localDate } from "@/dates";
 import { edgeScrollDelta, HOLD_MS, insertIndex, movementCancelsHold, pickDragBucket, type BucketZones, type PlanBucket } from "@/todo-drag";
 import { partitionLater, sortProjects, type LaterSection } from "@/todo-groups";
 import { loadCollapsedGroups, saveCollapsedGroups } from "@/storage/settings";
-import { partitionTodos, todoWhen } from "@/todos";
-import type { Project, Todo } from "@/types";
+import { isLeftover, isOverdueLater, partitionTodos, todoWhen } from "@/todos";
+import type { Project, ProposedTodo, Todo, TodoDraft, Waiting } from "@/types";
 
-const props = defineProps<{ todos: Todo[]; projects?: Project[] }>();
+const props = defineProps<{
+  todos: Todo[];
+  projects?: Project[];
+  waitings?: Waiting[];
+  pendingPropose?: ProposedTodo[] | null;
+  proposeKind?: "later" | "today";
+  existingProjects?: string[];
+  undoTitle?: string | null;
+  awaiting?: boolean;
+  date?: string;
+}>();
 const emit = defineEmits<{
   toggle: [id: string];
   remove: [id: string];
@@ -153,6 +253,14 @@ const emit = defineEmits<{
   renameGroup: [id: string, title: string];
   completeGroup: [id: string, done: boolean];
   createGroup: [title: string];
+  deleteGroup: [id: string];
+  add: [draft: TodoDraft];
+  update: [id: string, draft: TodoDraft];
+  tidy: [];
+  confirm: [items: ProposedTodo[]];
+  skip: [];
+  resolveWaiting: [id: string];
+  undoRemove: [];
 }>();
 
 const projectTitles = computed(() => new Map((props.projects ?? []).map((p) => [p.id, p.title])));
@@ -161,6 +269,47 @@ const openId = ref<string | null>(null);
 const sheet = ref<
   { mode: "assign"; todoId: string } | { mode: "manage"; project: Project } | { mode: "create" } | null
 >(null);
+const draft = ref<{ mode: "add" | "edit"; initial?: TodoDraft; editId?: string } | null>(null);
+
+function openAdd(when: PlanBucket = "today") {
+  sheet.value = null;
+  draft.value = { mode: "add", initial: { title: "", when } };
+}
+
+function onRowEdit(id: string) {
+  const t = props.todos.find((row) => row.id === id);
+  if (!t) return;
+  openId.value = null;
+  draft.value = {
+    mode: "edit",
+    editId: id,
+    initial: {
+      title: t.title,
+      when: todoWhen(t),
+      projectId: t.projectId ?? null,
+      due: t.due,
+      estimate: t.estimate,
+      priority: t.priority,
+      reason: t.reason,
+    },
+  };
+}
+
+function onDraftSubmit(next: TodoDraft) {
+  const editing = draft.value;
+  draft.value = null;
+  if (editing?.mode === "edit" && editing.editId) emit("update", editing.editId, next);
+  else emit("add", next);
+}
+
+function onShift(id: string) {
+  const row = props.todos.find((t) => t.id === id);
+  if (!row) return;
+  openId.value = null;
+  const to = todoWhen(row) === "today" ? "later" : "today";
+  if (to === "today") emit("move", id, "today", 0);
+  else emit("move", id, "later", 0, row.projectId ?? null);
+}
 
 function openCountOf(pid: string): number {
   return props.todos.filter((t) => t.projectId === pid && t.status === "open").length;
@@ -208,6 +357,12 @@ function onSheetComplete(done: boolean) {
   sheet.value = null;
   if (s?.mode === "manage") emit("completeGroup", s.project.id, done);
 }
+
+function onSheetDeleteGroup() {
+  const s = sheet.value;
+  sheet.value = null;
+  if (s?.mode === "manage") emit("deleteGroup", s.project.id);
+}
 const liftId = ref<string | null>(null);
 const insert = ref<{ bucket: PlanBucket; group: string | null; beforeId: string | null } | null>(null);
 const ghost = ref<{ title: string; top: number } | null>(null);
@@ -215,13 +370,16 @@ const reduceMotion = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 const scrollEl = ref<HTMLElement | null>(null);
 
-const buckets = computed(() => partitionTodos(props.todos, localDate()));
+const todayDate = computed(() => props.date ?? localDate());
+const buckets = computed(() => partitionTodos(props.todos, todayDate.value));
 const today = computed(() => buckets.value.today);
 const later = computed(() => buckets.value.later);
+const overdue = computed(() => later.value.filter((t) => isOverdueLater(t, todayDate.value)));
+const laterVisible = computed(() => later.value.length - overdue.value.length);
 const doneToday = computed(() => buckets.value.doneToday);
 const doneTodayPlan = computed(() => doneToday.value.filter((t) => todoWhen(t) === "today"));
 
-const laterSections = computed(() => partitionLater(props.todos, props.projects ?? []));
+const laterSections = computed(() => partitionLater(props.todos, props.projects ?? [], todayDate.value));
 
 const collapsed = ref<Set<string>>(new Set());
 onMounted(async () => {

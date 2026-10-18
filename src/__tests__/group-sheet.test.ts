@@ -61,8 +61,17 @@ describe("GroupSheet manage 模式", () => {
     const ren = mount(GroupSheet, {
       props: { mode: "manage", projects, group: projects[0], openCount: 0 },
     });
+    expect((ren.get("input").element as HTMLInputElement).value).toBe("搬家");
     await ren.get("input").setValue("乔迁");
     await ren.get("[data-rename]").trigger("click");
     expect(ren.emitted("rename")?.[0]).toEqual(["乔迁"]);
+  });
+
+  it("没有未完任务时能删除组", async () => {
+    const idle = mount(GroupSheet, {
+      props: { mode: "manage", projects, group: projects[0], openCount: 0 },
+    });
+    await idle.get("[data-group-delete]").trigger("click");
+    expect(idle.emitted("remove")).toHaveLength(1);
   });
 });

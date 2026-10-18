@@ -1,11 +1,12 @@
 import type { ApiMessage, ChatCompletionRequest, ChatCompletionResponse, ToolCall } from "@/api/deepseek";
 import { localDate } from "@/dates";
-import { debugLog } from "@/debug/log";
-import { normKey } from "@/norm";
-import { filterTodayPlanItems } from "@/todos-filter";
+import { debugLog, logDrops } from "@/debug/log";
+import { filterTodayPlanItems, withoutCoveredTitles } from "@/todos-filter";
 import { partitionTodos } from "@/todos";
 import type { ChatMessage, ChatMode, DailyLog, ParseResult, Project, ProposedTodo, TimelineEvent, Todo, Waiting } from "@/types";
+import { attributionTexts, isClarifyQuestion, prepareLaterProposals } from "./clarify";
 import { buildContextMessages, formatBucket } from "./context";
+import { parseJsonObject } from "./parse-json";
 import { systemPrompt } from "./prompt";
 import { TOOL_DEFS } from "./tools";
 
@@ -13,6 +14,14 @@ export const MAX_MODEL_CALLS = 4;
 
 export interface AgentDeps {
   complete: (req: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
+  /**
+   * 可选：流式补全。有它时回复循环改走它，onText 收到的是「到目前为止的累积全文」；
+   * 返回与 complete 同形。没有则完全走非流式老路。
+   */
+  completeStream?: (
+    req: ChatCompletionRequest,
+    onText: (accumulated: string) => void,
+  ) => Promise<ChatCompletionResponse>;
   listTodos: () => Promise<Todo[]>;
   setTodayPlan: (items: ProposedTodo[]) => Promise<void>;
   /** propose_todos 确认后落库（进「以后」）。 */
@@ -27,14 +36,6 @@ function formatTimeLabel(now: Date): string {
   const hh = String(h).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   return `${period} ${hh}:${mm}`;
-}
-
-function parseJson(raw: string): unknown | undefined {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return undefined;
-  }
 }
 
 function asProposedItems(raw: unknown): ProposedTodo[] | undefined {
@@ -80,9 +81,9 @@ function formatTodos(todos: Todo[], date: string): string {
   return formatBucket("今天", today, date) + formatBucket("以后", later, date) + formatBucket("今日已完成", doneToday, date);
 }
 
-async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
+async function executeTool(tc: ToolCall, deps: AgentDeps, mentionTexts: string[]): Promise<string> {
   const name = tc.function.name;
-  const parsed = parseJson(tc.function.arguments);
+  const parsed = parseJsonObject(tc.function.arguments);
   if (parsed === undefined) return "参数无效";
 
   if (name === "list_todos") {
@@ -93,20 +94,18 @@ async function executeTool(tc: ToolCall, deps: AgentDeps): Promise<string> {
   if (name === "propose_todos") {
     const items = asProposedTodos(parsed);
     if (!items) return "参数无效";
-    const existing = new Set((await deps.listTodos()).map((t) => normKey(t.title)));
-    const valid = items.filter((i) => {
-      const k = normKey(i.title);
-      if (!k || existing.has(k)) return false;
-      existing.add(k);
-      return true;
-    });
+    const valid = withoutCoveredTitles(items, await deps.listTodos());
+    logDrops("propose_todos", items.map((i) => i.title), valid.map((i) => i.title));
     if (valid.length === 0) return "这些事待办里已经有了，不用重复记";
+    const prepared = prepareLaterProposals(valid, mentionTexts);
+    logDrops("propose_todos", valid.map((i) => i.title), prepared.map((i) => i.title));
+    if (prepared.length === 0) return "这些事待办里已经有了，不用重复记";
     debugLog.push({
       event: "propose_ui",
       tool: "propose_todos",
-      detail: valid.map((v) => v.title).join("、"),
+      detail: prepared.map((v) => v.title).join("、"),
     });
-    const accepted = await deps.onPropose(valid, "later");
+    const accepted = await deps.onPropose(prepared, "later");
     if (accepted.length === 0) {
       debugLog.push({ event: "todo_rejected", tool: "propose_todos", detail: "用户这次不加" });
       return "用户这次不加";
@@ -153,12 +152,16 @@ export async function runAgent(input: {
   waitings?: Waiting[];
   parseResult?: ParseResult | null;
   recentEvents?: TimelineEvent[];
-}): Promise<{ assistantText: string; stopped: boolean }> {
+  /** 流式回复回调：收到的是本轮模型到目前为止的累积全文；工具轮没有文本，不会触发。 */
+  onReplyDelta?: (accumulated: string) => void;
+}): Promise<{ assistantText: string; stopped: boolean; executedPropose: boolean }> {
   const { deps, mode, userText, history, model } = input;
   const now = deps.now();
   const date = localDate(now);
   const todos = await deps.listTodos();
   const { today, later, doneToday } = partitionTodos(todos, date);
+  const mentionTexts = attributionTexts(userText, history);
+  let executedPropose = false;
 
   const messages: ApiMessage[] = [
     { role: "system", content: systemPrompt() },
@@ -181,15 +184,30 @@ export async function runAgent(input: {
   ];
 
   for (let i = 0; i < MAX_MODEL_CALLS; i++) {
-    const res = await deps.complete({
+    const req: ChatCompletionRequest = {
       model,
       messages,
       tools: TOOL_DEFS,
       tool_choice: "auto",
       stream: false,
-    });
+    };
+    // 有流式实现就走流式：文本轮 onText 逐字透传出去；工具轮本来就没文本，自然不触发，不用特殊处理。
+    let streamed = "";
+    const res = deps.completeStream
+      ? await deps.completeStream(req, (text) => {
+          streamed = text;
+          input.onReplyDelta?.(text);
+        })
+      : await deps.complete(req);
+    const text = res.content || streamed || "";
     if (!res.tool_calls || res.tool_calls.length === 0) {
-      return { assistantText: res.content || "", stopped: false };
+      return { assistantText: res.content || streamed || "", stopped: false, executedPropose };
+    }
+    // 引导问当轮不执行任何工具，问句即最终回复，避免续轮再提议。
+    if (isClarifyQuestion(text)) {
+      const dropped = (res.tool_calls ?? []).map((tc) => tc.function.name).join("、");
+      debugLog.push({ event: "todo_rejected", tool: "clarify", detail: `引导问当轮不提议，丢掉 ${dropped}` });
+      return { assistantText: text, stopped: false, executedPropose: false };
     }
     messages.push({
       role: "assistant",
@@ -202,7 +220,8 @@ export async function runAgent(input: {
         tool: tc.function.name,
         detail: tc.function.arguments,
       });
-      const result = await executeTool(tc, deps);
+      if (tc.function.name === "propose_todos" || tc.function.name === "set_today_plan") executedPropose = true;
+      const result = await executeTool(tc, deps, mentionTexts);
       debugLog.push({
         event: "tool_result",
         tool: tc.function.name,
@@ -217,5 +236,5 @@ export async function runAgent(input: {
   }
 
   debugLog.push({ event: "agent_stop", detail: "这轮没做成，再说一次。" });
-  return { assistantText: "这轮没做成，再说一次。", stopped: true };
+  return { assistantText: "这轮没做成，再说一次。", stopped: true, executedPropose };
 }

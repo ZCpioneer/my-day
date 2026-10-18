@@ -1,5 +1,23 @@
 import { shiftLocalDate } from "./dates";
 
+/** 编辑表单：日期 + 可选时刻拼回 due。 */
+export function composeDue(dateOnly: string, time?: string): string | undefined {
+  const day = dateOnly.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return undefined;
+  const clock = time?.trim() ?? "";
+  if (/^\d{2}:\d{2}/.test(clock)) return `${day}T${clock.slice(0, 5)}`;
+  return day;
+}
+
+/** 编辑表单：把 due 拆成日期和时刻。 */
+export function splitDue(due?: string): { date: string; time: string } {
+  if (!due) return { date: "", time: "" };
+  const day = due.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { date: "", time: "" };
+  const clock = due.slice(11, 16);
+  return { date: day, time: /^\d{2}:\d{2}$/.test(clock) ? clock : "" };
+}
+
 /** 截止时间的人话标签：已逾期 / 今天 / 明天 / M月D日；非法格式原样返回。 */
 export function dueLabel(due: string, today: string): string {
   const day = due.slice(0, 10);
